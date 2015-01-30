@@ -55,6 +55,22 @@ classdef DivTrack < matlab.mixin.Copyable
       end
     end
 
+    function dilute(obj,tgtConc,note)
+      obj.volume=obj.volume*obj.conc/tgtConc;
+      obj.conc=tgtConc;
+      if nargin<3
+        note='Dilute';
+      end
+      obj.printdiv(note);
+    end
+    
+    function diluteToVolume(obj, volume, note)
+      if nargin<3
+        note='Dilute';
+      end
+      obj.dilute(obj.conc*obj.volume/volume,note);
+    end
+    
     function randchoose(obj,note,goodgain,badgain)
       if nargin<4
         badgain=goodgain;
