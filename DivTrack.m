@@ -37,7 +37,7 @@ classdef DivTrack < matlab.mixin.Copyable
     end
 
     function printdiv(obj,note)
-      fprintf('%-40.40s   %c %4.0ful %4.0fnM Enrichment=%7.2g (%7.2g eff lib div) kgood=%8.2f kbad=%8.2f fracgood=%.1g\n',note,obj.prefix, obj.volume,obj.conc,obj.fracgood/obj.initfracgood, obj.moles(obj.volume,obj.conc)/obj.kgood*obj.fracgood/obj.ngoodinitial*obj.initdiversity,obj.kgood, obj.kbad, obj.fracgood);
+      fprintf('%-40.40s   %c %4.0ful %4.0fnM Div=%7.2g Enrich=%7.2g (%7.2g good kept) kgood=%8.2f kbad=%8.2f fracgood=%.1g\n',note,obj.prefix, obj.volume,obj.conc,obj.moles(obj.volume,obj.conc)/obj.kgood,obj.fracgood/obj.initfracgood, obj.moles(obj.volume,obj.conc)/obj.kgood*obj.fracgood/obj.ngoodinitial,obj.kgood, obj.kbad, obj.fracgood);
     end
 
     function resample(obj,note,goodgain,badgain)
