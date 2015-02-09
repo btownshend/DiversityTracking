@@ -28,16 +28,15 @@ div.RT(1.0,bt600);
 div.volume=div.volume*12;
 div.randchoose('Post-Ligation',.156*2);
 div.plotdist('R1 PostLig');
+
 % PCR using page-purified BT575
-cycles=3;
-pcrgain=2^cycles;
+cycles=4;
+pcrgain=2^(cycles-1);
 div.dilute(250/pcrgain,'Pre-PCR dilution');
 div.PCR(cycles,[bt28,bt575p]);
-div.plotdist('After PCR');
 
 div.volume=div.volume*3/div.kgood;
 div.randchoose('Use part for next round',4/div.kgood);  % Keep 2 copies/sequence
-div.plotdist('After taking part of PCR');
 div.dilute(200);	% Tune to not lose any more diversity
 div.T7(1958);
 div.volume=50;
@@ -47,4 +46,10 @@ div.randchoose('Post-PAGE',.454);
 div.RT(1.0,bt600);
 div.volume=div.volume*12;
 div.randchoose('Post-Ligation',.156*2);
-div.plotdist('R2 PostLig');
+div.plotdist('After R2 Ligation');
+% PCR using page-purified BT575
+cycles=3;
+pcrgain=2^(cycles-1);
+div.dilute(250/pcrgain,'Pre-PCR dilution');
+div.PCR(cycles,[bt28,bt575p]);
+div.plotdist('After R2 PCR');
