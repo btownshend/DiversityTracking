@@ -197,12 +197,16 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.cumcost=obj.cumcost+.0002*obj.volume;
     end
     
-    function gain=PCR(obj,ncycles,primersRaggedFrac)
+    function gain=PCR(obj,ncycles,primersRaggedFrac,isds)
     % PCR amplify the pool to the given final volume and concentration
     % Assumes perfect amplication and uniform copying of all non-ragged input molecules
     % The resulting pool will inherit the ragged fraction of the primers + the original unamplified ragged ones
       S1=struct('nbad',obj.nbad,'ngood',obj.ngood,'nragged',[obj.nragged(1),0]);
       S2=struct('nbad',obj.nbad,'ngood',obj.ngood,'nragged',[obj.nragged(2),0]);
+    % isds can be set to true to indicate the input is double-stranded; otherwise, if omitted, assumes input is single-stranded cDNA
+      if nargin<4
+        isds=false;
+      end
       for i=1:ncycles
         % Update
         fprintf('S1=%.2g %.2g [%.2g %.2g] S2=%.2g %.2g [%.2g %.2g]\n', S1.nbad, S1.ngood, S1.nragged, S2.nbad, S2.ngood, S2.nragged);

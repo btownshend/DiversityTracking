@@ -43,10 +43,11 @@ Select(obj,keepCleave, cleaveRate)
 % Choose molecules from the pool that either cleave or not (depending on keepCleave)
 % The cleavage rate of the bad sequences is 'cleaveRate'.  Ragged molecules never cleave and good molecules cleave with tgtCleave
 
-PCR(obj,finalvol, finalconc, primersRaggedFrac)
-% PCR amplify the pool to the given final volume and concentration
+PCR(obj, cycles, primersRaggedFrac, isds)
+% PCR amplify the pool with the given number of cycles 
 % Assumes perfect amplication and uniform copying of all non-ragged input molecules
 % The resulting pool will inherit the ragged fraction of the primers + the original unamplified ragged ones
+% isds can be set to true to indicate the input is double-stranded; otherwise, if omitted, assumes input is single-stranded cDNA
 
 T7(obj,rnaconc)
 % Transcribe the pool ending with the given RNA concentration
