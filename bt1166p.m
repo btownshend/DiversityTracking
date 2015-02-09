@@ -14,10 +14,11 @@ div.Select(true,0.171);
 div.measured('Post-PAGE',32,4231);
 div.RT(1.0,bt600);
 div.measured('Post-Ligation',704,30);
+div.plotdist('Trial');
 
 % Now run planned setup
 fprintf('\nPlanned:\n');
-div=DivTrack(1000,150,goodFrac,[bt88,templatep],'W',[0.2,0.8]);
+div=DivTrack(1300,150,goodFrac,[bt88,templatep],'W',[0.2,0.8]);
 div.T7(1958);
 div.volume=50;
 div.Select(true,0.171);
@@ -26,11 +27,24 @@ div.randchoose('Post-PAGE',.454);
 div.RT(1.0,bt600);
 div.volume=div.volume*12;
 div.randchoose('Post-Ligation',.156*2);
+div.plotdist('R1 PostLig');
 % PCR using page-purified BT575
 cycles=3;
 pcrgain=2^cycles;
 div.dilute(250/pcrgain,'Pre-PCR dilution');
 div.PCR(cycles,[bt28,bt575p]);
+div.plotdist('After PCR');
 
-div.randchoose('Use part for next round',2/pcrgain);
+div.volume=div.volume*3/div.kgood;
+div.randchoose('Use part for next round',4/div.kgood);  % Keep 2 copies/sequence
+div.plotdist('After taking part of PCR');
+div.dilute(200);	% Tune to not lose any more diversity
 div.T7(1958);
+div.volume=50;
+div.Select(true,0.3);   % Assume 30% cleavage
+div.volume=50;
+div.randchoose('Post-PAGE',.454);
+div.RT(1.0,bt600);
+div.volume=div.volume*12;
+div.randchoose('Post-Ligation',.156*2);
+div.plotdist('R2 PostLig');
