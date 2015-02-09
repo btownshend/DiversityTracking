@@ -19,5 +19,5 @@ bt654p=(1-pagepurity)*bt654;  % Most will probably still splint
 			  %   and will likely block cDNA if it is 8 or more long (full=43)
 
 fprintf('Fraction of product from each oligo that will be ragged on 5'' end:\n');
-fprintf('Template=%.2f/%.2f, BT600=%.2f, BT28=%.2f, BT88=%.2f, BT575=%.2f/%.2f, BT1076=%.2f/%.2f, BT654=%.2f/%.2f\n', template, templatep, bt600,bt28,bt88,bt575,bt575p,bt1076,bt1076p,bt654,bt654p);
+fprintf('BT600=%.2f, BT28=%.2f, BT88=%.2f, BT575=%.2f/%.2f, BT1076=%.2f/%.2f, BT654=%.2f/%.2f\n', bt600,bt28,bt88,bt575,bt575p,bt1076,bt1076p,bt654,bt654p);
 
