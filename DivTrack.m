@@ -57,7 +57,7 @@ classdef DivTrack < matlab.mixin.Copyable
     end
         
     function printdiv(obj,note)
-      fprintf('%-50.50s   %2s %4.0ful %4.0fnM Total=%7.2g Ragged=[%2.0f%%,%2.0f%%] Enrich=%7.2g kgood=%8.2f goodseqs=%5.3g cumcost=$%3.0f\n',note,obj.prefix, obj.volume,obj.conc(),obj.nbad+sum(obj.nragged)+obj.ngood,obj.nragged/(obj.nbad+obj.ngood+sum(obj.nragged))*100,obj.fracgood()/obj.initfracgood, obj.kgood, obj.ngood/obj.kgood, obj.cumcost);
+      fprintf('%-50.50s   %2s %4.0ful %5.0fnM Total=%7.2g Ragged=[%2.0f%%,%2.0f%%] Enrich=%7.2g kgood=%8.2f goodseqs=%5.3g cumcost=$%3.0f\n',note,obj.prefix, obj.volume,obj.conc(),obj.total(),obj.nragged/obj.total()*100,obj.fracgood()/obj.initfracgood, obj.kgood, obj.ngood/obj.kgood, obj.cumcost);
       obj.history=[obj.history,struct('ngood',obj.ngood,'bad',obj.nbad,'ragged',obj.nragged,'goodseqs',obj.ngood/obj.kgood,'note',note)];
     end
 
