@@ -6,13 +6,13 @@ classdef DivTrack < matlab.mixin.Copyable
     ngood;  % Number of good switch molecules in mixture
     nragged;	% Number with incorrect ends (due to short oligos) - first of the two elements refers to 5' end of RNA (or corresponding end of DNA)
     nbad;   % Number of other molecules in mixture (i.e. non-switches)
-    kgood;  % Avg. number of copies of each sequence in good molecules
     initfracgood;
     initngood;
     tgtCleave;
     prefix;
     history;
     cumcost;
+    goodseqs;  % Each value in this vector represents a unique sequence, keeps empirical distribution
   end
 
   methods(Static)
@@ -20,6 +20,7 @@ classdef DivTrack < matlab.mixin.Copyable
       m=vol*1e-6*conc*1e-9*6.022e23;
     end
   end
+  
   
   methods
     function obj=DivTrack(initvol, initconc, initfracgood,initfracragged,prefix,tgtCleave)
@@ -29,20 +30,30 @@ classdef DivTrack < matlab.mixin.Copyable
     % prefix is the prefix of the library;  'W','AW','BW','-'(cleaved);  just for keeping track
     % tgtCleave is the cleavage without and with target for the "good" sequences      
       obj.volume=initvol;
-      obj.kgood=1;
       obj.nragged=obj.moles(initvol,initconc)*initfracragged;
       obj.ngood=obj.moles(initvol,initconc)*initfracgood*(1-sum(initfracragged));
       obj.nbad=obj.moles(initvol,initconc)*(1-initfracgood)*(1-sum(initfracragged));
       obj.initfracgood=initfracgood*(1-sum(initfracragged));
       obj.initngood=obj.ngood;
+      obj.goodseqs=1:10000;
       obj.prefix=prefix;
       obj.tgtCleave=sort(tgtCleave);
       obj.history=[];
-      fprintf('Initial prefix=%s, Target cleavage=[%.2f, %.2f], Initial good=%.2g ragged=[%.2g %.2g] bad=%.2g\n',obj.prefix,obj.tgtCleave,obj.ngood, obj.nragged, obj.nbad);
+      fprintf('Initial prefix=%s, Target cleavage=[%.2f, %.2f], Initial good=%.3g ragged=[%.2g %.2g] bad=%.2g\n',obj.prefix,obj.tgtCleave,obj.ngood, obj.nragged, obj.nbad);
       obj.printdiv('Initial');
       obj.cumcost=0;
     end
 
+    function k=kgood(obj)
+    % Compute the mean number of copies of each good sequence
+      k=length(obj.goodseqs)/length(unique(obj.goodseqs));
+    end
+    
+    function g=divtarget(obj)
+    % Compute the fraction of the diversity target we are at
+      g=length(unique(obj.goodseqs))/10000 * obj.initngood;
+    end
+    
     function t=total(obj)
       t=obj.ngood+obj.nbad+sum(obj.nragged);
     end
@@ -57,8 +68,8 @@ classdef DivTrack < matlab.mixin.Copyable
     end
         
     function printdiv(obj,note)
-      fprintf('%-50.50s   %2s %4.0ful %5.0fnM Total=%7.2g Ragged=[%2.0f%%,%2.0f%%] Enrich=%7.2g kgood=%8.2f goodseqs=%5.3g cumcost=$%3.0f\n',note,obj.prefix, obj.volume,obj.conc(),obj.total(),obj.nragged/obj.total()*100,obj.fracgood()/obj.initfracgood, obj.kgood, obj.ngood/obj.kgood, obj.cumcost);
-      obj.history=[obj.history,struct('ngood',obj.ngood,'bad',obj.nbad,'ragged',obj.nragged,'goodseqs',obj.ngood/obj.kgood,'note',note)];
+      fprintf('%-50.50s   %2s %4.0ful %5.0fnM Total=%7.2g Ragged=[%2.0f%%,%2.0f%%] Enrich=%7.2g kgood=%8.2f goodseqs=%5.3g cumcost=$%3.0f\n',note,obj.prefix, obj.volume,obj.conc(),obj.total(),obj.nragged/obj.total()*100,obj.fracgood()/obj.initfracgood, obj.kgood(), obj.divtarget(), obj.cumcost);
+      obj.history=[obj.history,struct('ngood',obj.ngood,'bad',obj.nbad,'ragged',obj.nragged,'divtarget',obj.divtarget,'note',note)];
     end
 
     function plothistory(obj)
@@ -86,10 +97,10 @@ classdef DivTrack < matlab.mixin.Copyable
     
     function resample(obj,note,gain)
     % Resample (with replacement) pool with given gain
-      obj.kgood=obj.kgood*gain/(1-exp(-obj.kgood*gain));
       obj.ngood=obj.ngood*gain;
       obj.nbad=obj.nbad*gain;
       obj.nragged=obj.nragged*gain;
+      obj.goodseqs=randsample(obj.goodseqs,round(gain*length(obj.goodseqs)),true);
       obj.printdiv(sprintf('%s(gain=%.3f)',note,gain));
     end
 
@@ -120,11 +131,10 @@ classdef DivTrack < matlab.mixin.Copyable
         error('Bad gains: %f, %f, %f, %f\n', goodgain, badgain, raggedgain);
       end
       % Assume that there are exactly k copies of each sequence (TODO: does this reasonably approximate?)
-      pmissedgood=(1-goodgain)^obj.kgood;
-      obj.kgood=obj.kgood*goodgain/(1-pmissedgood);
       obj.ngood=obj.ngood*goodgain;
       obj.nbad=obj.nbad*badgain;
       obj.nragged=obj.nragged*raggedgain;
+      obj.goodseqs=randsample(obj.goodseqs,round(goodgain*length(obj.goodseqs)),false);
       if goodgain==badgain
         obj.printdiv(sprintf('%s(gain=%.3f)',note,goodgain));
       else
@@ -191,7 +201,6 @@ classdef DivTrack < matlab.mixin.Copyable
         S2=S2new;
         obj.goodseqs=[obj.goodseqs,randsample(obj.goodseqs,round(length(obj.goodseqs)*(1-primersRaggedFrac(1))),false)];
       end
-      goodseqs=obj.ngood/obj.kgood;
       fprintf('S1=%.2g %.2g [%.2g %.2g] S2=%.2g %.2g [%.2g %.2g]\n', S1.nbad, S1.ngood, S1.nragged, S2.nbad, S2.ngood, S2.nragged);
       % No change to number of good sequences since sampling is uniform
       oldtotal=obj.total;
