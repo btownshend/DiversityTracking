@@ -161,8 +161,9 @@ classdef DivTrack < matlab.mixin.Copyable
     function RT(obj, efficiency,primerRaggedFrac)
       obj.cumcost=obj.cumcost+.236*obj.volume;
       newRagged=(obj.ngood+obj.nbad)*efficiency*primerRaggedFrac;
-      obj.randchoose('RT',efficiency*(1-primerRaggedFrac));
-      obj.nragged(2)=newRagged;
+      gain=efficiency*(1-primerRaggedFrac);
+      obj.nragged(2)=newRagged/gain;
+      obj.randchoose('RT',gain);
     end
     
     function ligate(obj, prefix, efficiency)
