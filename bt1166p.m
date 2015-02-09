@@ -18,7 +18,7 @@ div.plotdist('Trial');
 
 % Now run planned setup
 fprintf('\nPlanned:\n');
-div=DivTrack(1300,150,goodFrac,[bt88,templatep],'W',[0.2,0.8]);
+div=DivTrack(1200,150,goodFrac,[bt88,templatep],'W',[0.2,0.8]);
 div.T7(1958);
 div.volume=50;
 div.Select(true,0.171);
