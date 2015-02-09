@@ -39,29 +39,29 @@ for i=1:5
     fprintf(ti);
     vol=1000; % High enough to keep kgood>=1.5
              % Start with at least 1.5 copies of good seqs
-    div=DivTrack(vol,90000/vol,1e-13*badCleavage,[1-pagepurity,1-pagepurity],'W',[0.2,0.8]);
+    div=DivTrack(vol,150,goodFrac,[1-pagepurity,1-pagepurity],'W',[0.2,0.8]);
   elseif i==2
     ti=sprintf('R1b. Gel selection of cleaved from non-PAGE-purified inputs\n');
     fprintf(ti);
-    div=DivTrack(7000,400,1e-13*badCleavage,[bt88,1-ce^lib],'W',[0.2,0.8]);
+    div=DivTrack(7000,400,goodFrac,[bt88,1-ce^lib],'W',[0.2,0.8]);
   elseif i==3
     ti=sprintf('R1c. Gel selection of cleaved from PCR products of non-PAGE-purified inputs\n');
     fprintf(ti);
-    div=DivTrack(4000,105,1e-13*badCleavage,[0.0,1-ce^lib],'W',[0.2,0.8]);
+    div=DivTrack(4000,105,goodFrac,[0.0,1-ce^lib],'W',[0.2,0.8]);
     div.PCR(div.volume,div.conc*8,[bt88,bt575]);
     div.volume=div.volume/4; div.randchoose('Part of PCR',0.25);
     div.diluteToVolume(2000,'T7 input dilution');
   elseif i==4
     ti=sprintf('R1d. Gel selection of cleaved from PCR products of non-PAGE-purified inputs using PAGE-oligos\n');
     fprintf(ti);
-    div=DivTrack(2500,155,1e-13*badCleavage,[0.0,1-ce^lib],'W',[0.2,0.8]);
+    div=DivTrack(2500,155,goodFrac,[0.0,1-ce^lib],'W',[0.2,0.8]);
     div.PCR(div.volume,div.conc*4,[bt88,bt575]);
     div.volume=div.volume/2; div.randchoose('Part of PCR',0.5);
     div.diluteToVolume(900,'T7 input dilution');
   elseif i==5
     ti=sprintf('R1e. Gel selection of cleaved from PCR products of PAGE-purified inputs using PAGE-oligos\n');
     fprintf(ti);
-    div=DivTrack(1500,65,1e-13*badCleavage,[0.0,1-pagepurity],'W',[0.2,0.8]);
+    div=DivTrack(1500,65,goodFrac,[0.0,1-pagepurity],'W',[0.2,0.8]);
     div.PCR(div.volume,div.conc*4,[bt88,bt575]);
     div.volume=div.volume/2; div.randchoose('Part of PCR',0.5);
     div.diluteToVolume(370,'T7 input dilution');
