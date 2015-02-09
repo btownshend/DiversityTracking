@@ -23,6 +23,11 @@ classdef DivTrack < matlab.mixin.Copyable
   
   methods
     function obj=DivTrack(initvol, initconc, initfracgood,initfracragged,prefix,tgtCleave)
+    % initialize pool with given volume (in ul) and concentration (in nM)
+    % initfracgood is the fraction of the total pool that is "good"
+    % initfracragged is a two-element vector providing the fraction of the pool that is ragged on the left and right ends
+    % prefix is the prefix of the library;  'W','AW','BW','-'(cleaved);  just for keeping track
+    % tgtCleave is the cleavage without and with target for the "good" sequences      
       obj.volume=initvol;
       obj.kgood=1;
       obj.nragged=obj.moles(initvol,initconc)*initfracragged;
@@ -80,6 +85,7 @@ classdef DivTrack < matlab.mixin.Copyable
     end
     
     function resample(obj,note,gain)
+    % Resample (with replacement) pool with given gain
       obj.kgood=obj.kgood*gain/(1-exp(-obj.kgood*gain));
       obj.ngood=obj.ngood*gain;
       obj.nbad=obj.nbad*gain;
@@ -104,6 +110,8 @@ classdef DivTrack < matlab.mixin.Copyable
     end
     
     function randchoose(obj,note,goodgain,badgain,raggedgain)
+    % Choose from the pool without replacement
+    % A different gain can be applied to each molecule class, each of which should be between 0 and 1
       if nargin<4
         badgain=goodgain;
         raggedgain=goodgain;
@@ -126,6 +134,9 @@ classdef DivTrack < matlab.mixin.Copyable
 
 % Select using given cleavage rate for BAD sequences
     function Select(obj,keepCleave,cleaveRate)
+    % Choose molecules from the pool that either cleave or not (depending on keepCleave)
+    % The cleavage rate of the bad molecules is 'cleaveRate'.  
+    % Ragged molecules never cleave and good molecules cleave with tgtCleave
       badgain=cleaveRate;
       if keepCleave
         % Compute badgain such that observed cleavage rate is obtained
@@ -138,7 +149,9 @@ classdef DivTrack < matlab.mixin.Copyable
     end
     
     function T7(obj,rnaconc)
-    % Assume ones with ragged 5 end won't transcribe
+    % Transcribe the pool ending with the given RNA concentration
+    % Assume molecules with ragged left end won't transcribe, but ragged right end ones are inherited
+    % After this method, the pool will be referring to the RNA produced only, not including the template
       obj.cumcost=obj.cumcost+0.079*obj.volume;   % Price/ul of rx:  T7: .050 NTP .016, SuperaseIn .013
       gain=rnaconc*obj.total()/(obj.conc()*(obj.ngood+obj.nbad+obj.nragged(2)));
       obj.nragged(1)=0;
@@ -159,6 +172,9 @@ classdef DivTrack < matlab.mixin.Copyable
     end
     
     function gain=PCR(obj,finalvol,finalconc,primersRaggedFrac)
+    % PCR amplify the pool to the given final volume and concentration
+    % Assumes perfect amplication and uniform copying of all non-ragged input molecules
+    % The resulting pool will inherit the ragged fraction of the primers + the original unamplified ragged ones
       obj.volume=finalvol;
       gain=obj.moles(finalvol,finalconc)/obj.moles(obj.volume,obj.conc());
       goodseqs=obj.ngood/obj.kgood;
@@ -173,6 +189,8 @@ classdef DivTrack < matlab.mixin.Copyable
     end
 
     function measured(obj,note,volume,conc)
+    % Update the pool to correspond to a measurement of an actual experiment
+    % Assumes that intervening steps caused loss of sample so applies randchoose with equal gain to all classes
       obj.volume=volume;
       gain=obj.moles(volume,conc)/obj.moles(obj.volume,obj.conc());
       obj.randchoose(note,gain);
