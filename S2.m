@@ -1,13 +1,14 @@
 % Initial DNA library used in first transcription
-geleff=0.5;
 coleff=0.8;
 ligeff=0.5;
+geleff=0.464;
 rteff=0.9;
 fullfrac=1;
 pcrgain=8;
 ce=0.99;
 lib=161;
-badCleavage=0.3;
+badCleavage=0.171;
+goodFrac=badCleavage/1e13;  % Want initial pool to have 10^-13 relative to CLEAVABLE sequences
 pagepurity=0.92;
 pageoligos=false;
 
