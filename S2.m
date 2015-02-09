@@ -80,5 +80,6 @@ for i=1:5
   div.PCR(div.volume,div.conc*pcrgain,[bt30,bt575]);
   setfig(sprintf('R1-%d',i)); clf;
   div.plothistory(); suptitle(sprintf('%s $%.0f/lib',ti,div.cumcost));
+  fprintf('Final fraction good sequences = 1 in %.2g\n',div.total()/div.kgood);
   %fprintf('Total cost for 10 libraries:  $%.0f\n', div.cumcost*10);
 end
