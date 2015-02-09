@@ -182,7 +182,7 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.volume=finalvol;
       gain=obj.moles(finalvol,finalconc)/obj.moles(obj.volume,obj.conc());
       goodseqs=obj.ngood/obj.kgood;
-      % No change to kgood since sampling is uniform
+      % No change to number of good sequences since sampling is uniform
       newragged=primersRaggedFrac*(gain-1)*(obj.nbad+obj.ngood);
       obj.nbad=obj.nbad*(1+(gain-1)*(1-sum(primersRaggedFrac)));
       obj.ngood=obj.ngood*(1+(gain-1)*(1-sum(primersRaggedFrac)));
