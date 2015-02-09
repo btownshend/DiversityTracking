@@ -101,10 +101,10 @@ classdef DivTrack < matlab.mixin.Copyable
         ti='Divtrack.dist';
       end
       cnt=hist(obj.goodseqs,1:max(obj.goodseqs));
-      [dist,n]=hist(cnt,1:max(cnt));
+      [dist,n]=hist(cnt,0:max(cnt));
       dist=dist/sum(dist)*obj.divtarget();
       setfig(ti);clf;
-      plot(n,dist,'o-');
+      plot(n(n>0),dist(n>0),'o-');
       xlabel('Number of copies of sequence');
       ylabel('Number of sequences');
       title(sprintf('%s: Total of %.2f sequences with mean of %.2f copies',ti, obj.divtarget(), obj.kgood()));
