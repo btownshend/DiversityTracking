@@ -38,13 +38,17 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.cumcost=0;
     end
 
+    function t=total(obj)
+      t=obj.ngood+obj.nbad+sum(obj.nragged);
+    end
+
     function f=fracgood(obj)
-      f=obj.ngood/(obj.ngood+obj.nbad+sum(obj.nragged));
+      f=obj.ngood/obj.total();
     end
     
     function c=conc(obj)
     % Concentration in nM
-      c=(obj.ngood+obj.nbad+sum(obj.nragged))/(obj.volume*1e-6)/6.022e23*1e9;
+      c=obj.total()/(obj.volume*1e-6)/6.022e23*1e9;
     end
         
     function printdiv(obj,note)
@@ -136,7 +140,7 @@ classdef DivTrack < matlab.mixin.Copyable
     function T7(obj,rnaconc)
     % Assume ones with ragged 5 end won't transcribe
       obj.cumcost=obj.cumcost+0.079*obj.volume;   % Price/ul of rx:  T7: .050 NTP .016, SuperaseIn .013
-      gain=rnaconc*(obj.ngood+obj.nbad+sum(obj.nragged))/(obj.conc()*(obj.ngood+obj.nbad+obj.nragged(2)));
+      gain=rnaconc*obj.total()/(obj.conc()*(obj.ngood+obj.nbad+obj.nragged(2)));
       obj.nragged(1)=0;
       obj.resample('T7',gain);
     end
