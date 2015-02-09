@@ -27,9 +27,10 @@ div.RT(1.0,bt600);
 div.volume=div.volume*12;
 div.randchoose('Post-Ligation',.156*2);
 % PCR using page-purified BT575
-pcrgain=8;
+cycles=3;
+pcrgain=2^cycles;
 div.dilute(250/pcrgain,'Pre-PCR dilution');
-div.PCR(div.volume,div.conc*pcrgain,[bt28,bt575p]);
+div.PCR(cycles,[bt28,bt575p]);
 
 div.randchoose('Use part for next round',2/pcrgain);
 div.T7(1958);

@@ -172,22 +172,33 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.cumcost=obj.cumcost+.0002*obj.volume;
     end
     
-    function gain=PCR(obj,finalvol,finalconc,primersRaggedFrac)
+    function gain=PCR(obj,ncycles,primersRaggedFrac)
     % PCR amplify the pool to the given final volume and concentration
     % Assumes perfect amplication and uniform copying of all non-ragged input molecules
     % The resulting pool will inherit the ragged fraction of the primers + the original unamplified ragged ones
-      if finalconc>250
-        fprintf('Warning: Final PCR concentration too high -- may have template dimers\n');
+      S1=struct('nbad',obj.nbad,'ngood',obj.ngood,'nragged',[obj.nragged(1),0]);
+      S2=struct('nbad',obj.nbad,'ngood',obj.ngood,'nragged',[obj.nragged(2),0]);
+      for i=1:ncycles
+        % Update
+        fprintf('S1=%.2g %.2g [%.2g %.2g] S2=%.2g %.2g [%.2g %.2g]\n', S1.nbad, S1.ngood, S1.nragged, S2.nbad, S2.ngood, S2.nragged);
+        S1new=struct('nbad',S1.nbad+S2.nbad*(1-primersRaggedFrac(1)),...
+                     'ngood',S1.ngood+S2.ngood*(1-primersRaggedFrac(1)),...
+                     'nragged',S1.nragged+[primersRaggedFrac(1)*(S2.ngood+S2.nbad),S2.nragged(1)]);
+        S2new=struct('nbad',S2.nbad+S1.nbad*(1-primersRaggedFrac(1)),...
+                     'ngood',S2.ngood+S1.ngood*(1-primersRaggedFrac(1)),...
+                     'nragged',S2.nragged+[primersRaggedFrac(1)*(S1.ngood+S1.nbad),S1.nragged(1)]);
+        S1=S1new;
+        S2=S2new;
+        obj.goodseqs=[obj.goodseqs,randsample(obj.goodseqs,round(length(obj.goodseqs)*(1-primersRaggedFrac(1))),false)];
       end
-      obj.volume=finalvol;
-      gain=obj.moles(finalvol,finalconc)/obj.moles(obj.volume,obj.conc());
       goodseqs=obj.ngood/obj.kgood;
+      fprintf('S1=%.2g %.2g [%.2g %.2g] S2=%.2g %.2g [%.2g %.2g]\n', S1.nbad, S1.ngood, S1.nragged, S2.nbad, S2.ngood, S2.nragged);
       % No change to number of good sequences since sampling is uniform
-      newragged=primersRaggedFrac*(gain-1)*(obj.nbad+obj.ngood);
-      obj.nbad=obj.nbad*(1+(gain-1)*(1-sum(primersRaggedFrac)));
-      obj.ngood=obj.ngood*(1+(gain-1)*(1-sum(primersRaggedFrac)));
-      obj.nragged=newragged+obj.nragged;
-      obj.kgood=obj.ngood/goodseqs;
+      oldtotal=obj.total;
+      obj.ngood=min(S1.ngood,S2.ngood);
+      obj.nbad=min(S1.nbad,S2.nbad);
+      obj.nragged=[max(S1.nragged(1),S2.nragged(2)),max(S1.nragged(2),S2.nragged(1))];
+      gain=obj.total/oldtotal;
       obj.cumcost=obj.cumcost+obj.volume*263/250/50;  % Kapa is $263/250U, uses 1U/50ul
       obj.printdiv(sprintf('PCR (gain=%.3f)',gain));
     end
