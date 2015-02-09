@@ -176,6 +176,9 @@ classdef DivTrack < matlab.mixin.Copyable
     % PCR amplify the pool to the given final volume and concentration
     % Assumes perfect amplication and uniform copying of all non-ragged input molecules
     % The resulting pool will inherit the ragged fraction of the primers + the original unamplified ragged ones
+      if finalconc>250
+        fprintf('Warning: Final PCR concentration too high -- may have template dimers\n');
+      end
       obj.volume=finalvol;
       gain=obj.moles(finalvol,finalconc)/obj.moles(obj.volume,obj.conc());
       goodseqs=obj.ngood/obj.kgood;
