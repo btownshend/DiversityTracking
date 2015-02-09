@@ -116,8 +116,8 @@ classdef DivTrack < matlab.mixin.Copyable
         badgain=goodgain;
         raggedgain=goodgain;
       end
-      if badgain>1.0 || badgain<0.0 || goodgain>1.0 || goodgain<0.0
-        error('Bad gains: %f, %f\n', goodgain, badgain);
+      if badgain>1.0 || badgain<0.0 || goodgain>1.0 || goodgain<0.0 || any(raggedgain<0) || any(raggedgain>1)
+        error('Bad gains: %f, %f, %f, %f\n', goodgain, badgain, raggedgain);
       end
       % Assume that there are exactly k copies of each sequence (TODO: does this reasonably approximate?)
       pmissedgood=(1-goodgain)^obj.kgood;
