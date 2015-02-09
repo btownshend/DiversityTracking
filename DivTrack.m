@@ -74,19 +74,19 @@ classdef DivTrack < matlab.mixin.Copyable
 
     function plothistory(obj)
       subplot(211);
-      semilogy([obj.history.bad],'-o');
+      h=semilogy([obj.history.bad],'-o');
       hold on;
-      semilogy(arrayfun(@(z) z.ragged(1),obj.history),'-o');
-      semilogy(arrayfun(@(z) z.ragged(2),obj.history),'-o');
+      h(2)=semilogy(arrayfun(@(z) z.ragged(1),obj.history),'-o');
+      h(3)=semilogy(arrayfun(@(z) z.ragged(2),obj.history),'-o');
       set(gca,'XTick',1:length(obj.history));
       set(gca,'XTickLabel',{});
-      legend('bad','left ragged','right ragged');
+      legend(h,{'bad','left ragged','right ragged'});
       
       subplot(212);
-      semilogy([obj.history.ngood],'-o');
+      h=semilogy([obj.history.ngood],'-o');
       hold on;
-      semilogy([obj.history.goodseqs],'-o');
-      legend('good','good sequences');
+      h(2)=semilogy([obj.history.divtarget],'-o');
+      legend(h,{'good','good sequences'});
       set(gca,'XTick',1:length(obj.history));
       set(gca,'XTickLabel',{obj.history.note});
       set(gca,'XTickLabelRotation',15);
