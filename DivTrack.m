@@ -201,25 +201,36 @@ classdef DivTrack < matlab.mixin.Copyable
     % PCR amplify the pool to the given final volume and concentration
     % Assumes perfect amplication and uniform copying of all non-ragged input molecules
     % The resulting pool will inherit the ragged fraction of the primers + the original unamplified ragged ones
-      S1=struct('nbad',obj.nbad,'ngood',obj.ngood,'nragged',[obj.nragged(1),0]);
-      S2=struct('nbad',obj.nbad,'ngood',obj.ngood,'nragged',[obj.nragged(2),0]);
     % isds can be set to true to indicate the input is double-stranded; otherwise, if omitted, assumes input is single-stranded cDNA
       if nargin<4
         isds=false;
       end
+      
+      if isds
+        S1=struct('nbad',obj.nbad,'ngood',obj.ngood,'nragged',[obj.nragged(1),0],'goodseqs',obj.goodseqs);
+      else
+        if obj.nragged(1)>0
+          fprintf('Warning: PCR of single-stranded cDNA, but left end has some ragged 5''-ends??\n');
+        end
+        S1=struct('nbad',0,'ngood',0,'nragged',[0,0],'goodseqs',[1]);  % Keep 1 sequence to avoid errors later
+      end
+      S2=struct('nbad',obj.nbad,'ngood',obj.ngood,'nragged',[obj.nragged(2),0],'goodseqs',obj.goodseqs);
+
       for i=1:ncycles
         % Update
         fprintf('S1=%.2g %.2g [%.2g %.2g] S2=%.2g %.2g [%.2g %.2g]\n', S1.nbad, S1.ngood, S1.nragged, S2.nbad, S2.ngood, S2.nragged);
         S1new=struct('nbad',S1.nbad+S2.nbad*(1-primersRaggedFrac(1)),...
                      'ngood',S1.ngood+S2.ngood*(1-primersRaggedFrac(1)),...
-                     'nragged',S1.nragged+[primersRaggedFrac(1)*(S2.ngood+S2.nbad),S2.nragged(1)]);
-        S2new=struct('nbad',S2.nbad+S1.nbad*(1-primersRaggedFrac(1)),...
-                     'ngood',S2.ngood+S1.ngood*(1-primersRaggedFrac(1)),...
-                     'nragged',S2.nragged+[primersRaggedFrac(1)*(S1.ngood+S1.nbad),S1.nragged(1)]);
+                     'nragged',S1.nragged+[primersRaggedFrac(1)*(S2.ngood+S2.nbad),S2.nragged(1)],...
+                     'goodseqs',[S1.goodseqs,randsample(S2.goodseqs,round(length(S2.goodseqs)*(1-primersRaggedFrac(1))))]);
+        S2new=struct('nbad',S2.nbad+S1.nbad*(1-primersRaggedFrac(2)),...
+                     'ngood',S2.ngood+S1.ngood*(1-primersRaggedFrac(2)),...
+                     'nragged',S2.nragged+[primersRaggedFrac(2)*(S1.ngood+S1.nbad),S1.nragged(1)],...
+                     'goodseqs',[S2.goodseqs,randsample(S1.goodseqs,round(length(S1.goodseqs)*(1-primersRaggedFrac(2))))]);
         S1=S1new;
         S2=S2new;
-        obj.goodseqs=[obj.goodseqs,randsample(obj.goodseqs,round(length(obj.goodseqs)*(1-primersRaggedFrac(1))),false)];
       end
+      obj.goodseqs=S2.goodseqs;   % Reverse-complement strand is template for future transcription
       fprintf('S1=%.2g %.2g [%.2g %.2g] S2=%.2g %.2g [%.2g %.2g]\n', S1.nbad, S1.ngood, S1.nragged, S2.nbad, S2.ngood, S2.nragged);
       % No change to number of good sequences since sampling is uniform
       oldtotal=obj.total;
