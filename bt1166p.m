@@ -39,7 +39,7 @@ div.PCR(cycles,[bt28,bt575p]);
 
 div.volume=div.volume*4/div.kgood;
 div.randchoose('Use part for next round',4/div.kgood);  % Keep 2 copies/sequence
-div.dilute(200);	% Tune to not lose any more diversity
+div.dilute(300);	% Tune to not lose any more diversity
 div.T7(1958);
 div.volume=50;
 div.Select(true,0.3);   % Assume 30% cleavage
