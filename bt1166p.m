@@ -26,8 +26,9 @@ div.volume=50;
 div.randchoose('Post-PAGE',.454);
 div.dilute(0.8*3150);	% Dilute to 80% of Omniscript max capacity
 div.RT(1.0,bt600);
-div.randchoose('Post-Ligation',.156*2);
 div.dilute(min(div.conc/12,100));	% Keep below splint+oligo conc, but with at least 12x dilution
+div.randchoose('Post-Ligation',.24*1.84);	% Assuming input in pilot run was limited to 125nM extension concentration, efficiency was 30/125=.24
+                                                % Using PAGE oligos improves this by 1.84x
 div.plotdist('R1 PostLig');
 
 % PCR using page-purified BT575
@@ -46,8 +47,8 @@ div.volume=50;
 div.randchoose('Post-PAGE',.454);
 div.dilute(0.8*3150);
 div.RT(1.0,bt600);
-div.randchoose('Post-Ligation',.156*2);
 div.dilute(min(div.conc/12,100));	% Keep below splint+oligo conc, but with at least 12x dilution
+div.randchoose('Post-Ligation',.24*1.84);
 div.plotdist('After R2 Ligation');
 % PCR using page-purified BT575
 cycles=3;
