@@ -37,7 +37,7 @@ pcrgain=2^(cycles-1);
 div.dilute(1000/pcrgain,'Pre-PCR dilution');
 div.PCR(cycles,[bt28,bt575p]);
 
-div.volume=div.volume*3/div.kgood;
+div.volume=div.volume*4/div.kgood;
 div.randchoose('Use part for next round',4/div.kgood);  % Keep 2 copies/sequence
 div.dilute(200);	% Tune to not lose any more diversity
 div.T7(1958);
