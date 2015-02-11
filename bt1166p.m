@@ -34,7 +34,7 @@ div.plotdist('R1 PostLig');
 % PCR using page-purified BT575
 cycles=4;
 pcrgain=2^(cycles-1);
-div.dilute(250/pcrgain,'Pre-PCR dilution');
+div.dilute(1000/pcrgain,'Pre-PCR dilution');
 div.PCR(cycles,[bt28,bt575p]);
 
 div.volume=div.volume*3/div.kgood;
@@ -53,6 +53,6 @@ div.plotdist('After R2 Ligation');
 % PCR using page-purified BT575
 cycles=3;
 pcrgain=2^(cycles-1);
-div.dilute(250/pcrgain,'Pre-PCR dilution');
+div.dilute(1000/pcrgain,'Pre-PCR dilution');
 div.PCR(cycles,[bt28,bt575p]);
 div.plotdist('After R2 PCR');
