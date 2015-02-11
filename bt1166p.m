@@ -24,6 +24,7 @@ div.volume=50;
 div.Select(true,0.171);
 div.volume=50;
 div.randchoose('Post-PAGE',.454);
+div.dilute(0.8*3150);	% Dilute to 80% of Omniscript max capacity
 div.RT(1.0,bt600);
 div.volume=div.volume*12;
 div.randchoose('Post-Ligation',.156*2);
@@ -43,6 +44,7 @@ div.volume=50;
 div.Select(true,0.3);   % Assume 30% cleavage
 div.volume=50;
 div.randchoose('Post-PAGE',.454);
+div.dilute(0.8*3150);
 div.RT(1.0,bt600);
 div.volume=div.volume*12;
 div.randchoose('Post-Ligation',.156*2);
