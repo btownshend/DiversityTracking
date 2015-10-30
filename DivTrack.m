@@ -187,6 +187,13 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.resample('T7',gain);
     end
 
+    function BeadSep(obj, beadConc, efficiency)
+    % Bead separation with given bead conc (mg/ml) and efficiency
+      obj.randchoose('Bead separation',efficiency);
+      cost=1648/(100e3);   % Cost of 1ug of beads  based on $1648/(10ml * 10mg/ml) 
+      obj.cumcost=obj.cumcost+obj.volume*beadConc*cost;
+    end
+    
     function RT(obj, efficiency,primerRaggedFrac)
     % Reverse transcription
     % bad, good, left-ragged all get same gain of efficiency*(1-primerRaggedFrac)
