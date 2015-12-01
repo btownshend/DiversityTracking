@@ -272,5 +272,12 @@ classdef DivTrack < matlab.mixin.Copyable
       gain=obj.moles(volume,conc)/obj.moles(obj.volume,obj.conc());
       obj.randchoose(note,gain);
     end
+
+    function keeppart(obj,note,volume)
+    % Only keep given volume
+      gain=volume/obj.volume;
+      obj.volume=volume;
+      obj.randchoose(note,gain);
+    end
   end
 end
