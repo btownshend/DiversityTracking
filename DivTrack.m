@@ -13,6 +13,8 @@ classdef DivTrack < matlab.mixin.Copyable
     history;
     cumcost;
     goodseqs;  % Each value in this vector represents a unique sequence, keeps empirical distribution
+    poolCleavage;  % Empirical distribution of pool cleavages
+    poolFrac;	   % Corresponding prob of each pool cleavage
   end
 
   methods(Static)
@@ -23,12 +25,13 @@ classdef DivTrack < matlab.mixin.Copyable
   
   
   methods
-    function obj=DivTrack(initvol, initconc, initfracgood,initfracragged,prefix,tgtCleave)
+    function obj=DivTrack(initvol, initconc, initfracgood,initfracragged,prefix,tgtCleave,poolCleavage)
     % initialize pool with given volume (in ul) and concentration (in nM)
     % initfracgood is the fraction of the total pool that is "good"
     % initfracragged is a two-element vector providing the fraction of the pool that is ragged on the left and right ends
     % prefix is the prefix of the library;  'W','AW','BW','-'(cleaved);  just for keeping track
-    % tgtCleave is the cleavage without and with target for the "good" sequences      
+    % tgtCleave is the cleavage with and without target for the "good" sequences      
+    % poolFitness is an empirical distribution of the cleavage of the pool, each value is equally probable
       obj.volume=initvol;
       if length(initfracragged)==2
         initfracragged(3)=prod(initfracragged); % Both ends rough (assume independence)
@@ -41,8 +44,10 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.initngood=obj.ngood;
       obj.goodseqs=1:10000;
       obj.prefix=prefix;
-      obj.tgtCleave=sort(tgtCleave);
+      obj.tgtCleave=tgtCleave;
       obj.history=[];
+      obj.poolCleavage=poolCleavage;
+      obj.poolFrac=ones(size(poolCleavage))/length(poolCleavage);
       fprintf('Initial prefix=%s, Target cleavage=[%.2f, %.2f], Initial good=%.3g ragged=[%.2g %.2g %.2g] bad=%.2g\n',obj.prefix,obj.tgtCleave,obj.ngood, obj.nragged, obj.nbad);
       obj.printdiv('Initial');
       obj.cumcost=0;
@@ -161,20 +166,40 @@ classdef DivTrack < matlab.mixin.Copyable
       end
     end
 
-% Select using given cleavage rate for BAD sequences
-    function Select(obj,keepCleave,cleaveRate)
-    % Choose molecules from the pool that either cleave or not (depending on keepCleave)
-    % The cleavage rate of the bad molecules is 'cleaveRate'.  
-    % Ragged molecules never cleave and good molecules cleave with tgtCleave
-      badgain=cleaveRate;
+    function gamma=findGamma(obj,keepCleave,retentionFraction)
+    % Find scale factor for non-cleavers that results in given retentionFraction
+    % Assume (1-cleavage) is raised to some power 
       if keepCleave
-        % Compute badgain such that observed cleavage rate is obtained
+        % i.e. retain(i)=1-(1-poolCleavage(i))^gamma;   sum(retain(i)*poolFrac(i))=retentionFraction
+        gamma=fminsearch(@(z) (sum((1-(1-obj.poolCleavage).^z).*obj.poolFrac)-retentionFraction)^2,1.0);
+      else
+        % Find scale factor for non-cleavers that results in given retentionFraction
+        % i.e. retain(i)=(1-poolCleavage(i))^gamma;   sum(retain(i)*poolFrac(i))=retentionFraction
+        gamma=fminsearch(@(z) (sum((1-obj.poolCleavage).^z.*obj.poolFrac)-retentionFraction)^2,1.0);
+      end
+    end
+      
+    function Select(obj,keepCleave,gamma)
+    % Choose molecules from the pool that either cleave or not (depending on keepCleave)
+    % The cleavage rate of the bad molecules is based on the empirical distribution poolCleavage and poolFrac.  
+    % Ragged molecules never cleave and good molecules cleave with tgtCleave
+    % Cleavage values are mapped to values that result in the observed retentionFraction
+      if keepCleave
+        retain=1-(1-obj.poolCleavage).^gamma;
+        tgtRetain=1-(1-obj.tgtCleave(2))^gamma;
+        meanRetain=sum(retain.*obj.poolFrac);
         obj.prefix='-';
-        obj.randchoose(sprintf('Select(Clv,clv=%.2f)',cleaveRate),obj.tgtCleave(2),badgain,0);
+        obj.randchoose(sprintf('Select(Clv,%.1f)',gamma),tgtRetain,meanRetain,0);
       else
         obj.prefix='W';
-        obj.randchoose(sprintf('Select(Unclv,clv=%.2f)',cleaveRate),1-obj.tgtCleave(1),badgain,1.0);
+        fprintf('Gamma=%.1f\n',gamma);
+        retain=(1-obj.poolCleavage).^gamma;
+        tgtRetain=(1-obj.tgtCleave(1))^gamma;
+        meanRetain=sum(retain.*obj.poolFrac);
+        obj.randchoose(sprintf('Select(Unclv,%.1f)',gamma),tgtRetain,meanRetain,1.0);
       end
+      obj.poolFrac=obj.poolFrac.*retain;
+      obj.poolFrac=obj.poolFrac/sum(obj.poolFrac);
     end
     
     function T7(obj,rnaconc)
