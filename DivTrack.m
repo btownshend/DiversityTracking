@@ -12,6 +12,7 @@ classdef DivTrack < matlab.mixin.Copyable
     prefix;
     history;
     cumcost;
+    randtargets;   % Number of unique random numbers to use for good seqs
     goodseqs;  % Each value in this vector represents a unique sequence, keeps empirical distribution
     poolCleavage;  % Empirical distribution of pool cleavages
     poolFrac;	   % Corresponding prob of each pool cleavage
@@ -42,7 +43,8 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.nbad=obj.moles(initvol,initconc)*(1-initfracgood)*(1-sum(initfracragged));
       obj.initfracgood=initfracgood*(1-sum(initfracragged));
       obj.initngood=obj.ngood;
-      obj.goodseqs=1:10000;
+      obj.randtargets=100;
+      obj.goodseqs=1:obj.randtargets;
       obj.prefix=prefix;
       obj.tgtCleave=tgtCleave;
       obj.history=[];
@@ -60,7 +62,7 @@ classdef DivTrack < matlab.mixin.Copyable
     
     function g=divtarget(obj)
     % Compute the fraction of the diversity target we are at
-      g=length(unique(obj.goodseqs))/10000 * obj.initngood;
+      g=length(unique(obj.goodseqs))/obj.randtargets * obj.initngood;
     end
     
     function t=total(obj)
@@ -182,21 +184,22 @@ classdef DivTrack < matlab.mixin.Copyable
     function Select(obj,keepCleave,gamma)
     % Choose molecules from the pool that either cleave or not (depending on keepCleave)
     % The cleavage rate of the bad molecules is based on the empirical distribution poolCleavage and poolFrac.  
-    % Ragged molecules never cleave and good molecules cleave with tgtCleave
+    % OLD: Ragged molecules never cleave and good molecules cleave with tgtCleave
+    % With loopback: Ragged carries through (will affect subsequent extensions)
     % Cleavage values are mapped to values that result in the observed retentionFraction
       if keepCleave
         retain=1-(1-obj.poolCleavage).^gamma;
         tgtRetain=1-(1-obj.tgtCleave(2))^gamma;
         meanRetain=sum(retain.*obj.poolFrac);
         obj.prefix='-';
-        obj.randchoose(sprintf('Select(Clv,%.1f)',gamma),tgtRetain,meanRetain,0);
+        obj.randchoose(sprintf('Select(Clv,%.1f)',gamma),tgtRetain,meanRetain,meanRetain);
       else
         obj.prefix='W';
         fprintf('Gamma=%.1f\n',gamma);
         retain=(1-obj.poolCleavage).^gamma;
         tgtRetain=(1-obj.tgtCleave(1))^gamma;
         meanRetain=sum(retain.*obj.poolFrac);
-        obj.randchoose(sprintf('Select(Unclv,%.1f)',gamma),tgtRetain,meanRetain,1.0);
+        obj.randchoose(sprintf('Select(Unclv,%.1f)',gamma),tgtRetain,meanRetain,meanRetain);
       end
       obj.poolFrac=obj.poolFrac.*retain;
       obj.poolFrac=obj.poolFrac/sum(obj.poolFrac);
@@ -227,14 +230,14 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.cumcost=obj.cumcost+.236*obj.volume;
       % First assume that anything right-ragged won't be RT-ed
       obj.nragged(2:3)=0;
-      % Apply the gain
-      obj.randchoose('RT',efficiency);
       % Now move some things to right-ragged
       obj.nragged(2)=(obj.nbad+obj.ngood)*primerRaggedFrac;
       obj.nbad=obj.nbad*(1-primerRaggedFrac);
       obj.ngood=obj.ngood*(1-primerRaggedFrac);
       obj.nragged(3)=obj.nragged(1)*primerRaggedFrac;
       obj.nragged(1)=obj.nragged(1)*(1-primerRaggedFrac);
+      % Apply the gain
+      obj.randchoose('RT',efficiency);
     end
     
     function ligate(obj, prefix, efficiency)
