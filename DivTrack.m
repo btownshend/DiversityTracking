@@ -43,7 +43,7 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.nbad=obj.moles(initvol,initconc)*(1-initfracgood)*(1-sum(initfracragged));
       obj.initfracgood=initfracgood*(1-sum(initfracragged));
       obj.initngood=obj.ngood;
-      obj.randtargets=100;
+      obj.randtargets=1000;
       obj.goodseqs=1:obj.randtargets;
       obj.prefix=prefix;
       obj.tgtCleave=tgtCleave;
