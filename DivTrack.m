@@ -48,11 +48,17 @@ classdef DivTrack < matlab.mixin.Copyable
       obj.prefix=prefix;
       obj.tgtCleave=tgtCleave;
       obj.history=[];
-      obj.poolCleavage=poolCleavage;
+      obj.setPoolCleavage(poolCleavage);
       obj.poolFrac=ones(size(poolCleavage))/length(poolCleavage);
       fprintf('Initial prefix=%s, Target cleavage=[%.2f, %.2f], Initial good=%.3g ragged=[%.2g %.2g %.2g] bad=%.2g\n',obj.prefix,obj.tgtCleave,obj.ngood, obj.nragged, obj.nbad);
       obj.printdiv('Initial');
       obj.cumcost=0;
+    end
+
+    function setPoolCleavage(obj,poolCleavage)
+    % Update pool cleavage to given setting
+      obj.poolCleavage=poolCleavage;
+      obj.poolFrac=ones(size(poolCleavage))/length(poolCleavage);
     end
 
     function k=kgood(obj)
