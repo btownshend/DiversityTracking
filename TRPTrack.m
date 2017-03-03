@@ -3,83 +3,141 @@
 classdef TRPTrack < matlab.mixin.Copyable
   properties
     volume; % Volume in ul
-    ngood;  % Number of good switch molecules in mixture
-    nbad;   % Number of other molecules in mixture (i.e. non-switches)
+    ndna;   % ndna(type,goodbad) - type 1=W, 2=no prefix, 3=T7W, 4=circ, 5-W_RNA, 6-clvd RNA; goodbad 1=good, 2=bad
     initfracgood;
     initngood;
-    tgtCleave;
-    prefix;
     history;
     cumcost;
     randtargets;   % Number of unique random numbers to use for good seqs
-    goodseqs;  % Each value in this vector represents a unique sequence, keeps empirical distribution
-    poolCleavage;  % Empirical distribution of pool cleavages
-    poolFrac;	   % Corresponding prob of each pool cleavage
+    goodseqs;  	   % goodseqs{type} - Each value in this vector represents a unique sequence, keeps empirical distribution
+    rnaLength;  % Uncleaved RNA length in nt
+    mw;		% Molecular weight of each type
+    active;	% Currently active stage (i.e. which is the relevant goodseqs)
   end
 
+  properties (Constant)
+    TYPE_W=1;
+    TYPE_NP=2;
+    TYPE_T7W=3;
+    TYPE_CIRC=4;
+    TYPE_URNA=5;
+    TYPE_CRNA=6;
+    GOOD=1;
+    BAD=2;
+  end
+  
   methods(Static)
     function m=moles(vol,conc)
       m=vol*1e-6*conc*1e-9*6.022e23;
     end
+
+    function dsdna=MWdsDNA(len)
+      dsdna=len*607.4+157.9;
+      ssdna=len*303.7+79;
+      rdna=len*320.5+159.0;
+    end
+    function ssdna=MWssDNA(len)
+      ssdna=len*303.7+79;
+    end
+    function rna=MWRNA(len)
+      rna=len*320.5+159.0;
+    end
+    
+    function ngul=conc2ngul(conc,mw)
+      ngul=conc*1e-9*mw*1000;
+    end
+   
   end
   
   
   methods
-    function obj=TRPTrack(initvol, initconc, initfracgood,prefix,tgtCleave,poolCleavage)
+    function obj=TRPTrack(initvol, initconc, ngood)
     % initialize pool with given volume (in ul) and concentration (in nM)
     % initfracgood is the fraction of the total pool that is "good"
-    % prefix is the prefix of the library;  'W','AW','BW','-'(cleaved);  just for keeping track
-    % tgtCleave is the cleavage with and without target for the "good" sequences      
     % poolFitness is an empirical distribution of the cleavage of the pool, each value is equally probable
       obj.volume=initvol;
-      obj.ngood=obj.moles(initvol,initconc)*initfracgood;
-      obj.nbad=obj.moles(initvol,initconc)*(1-initfracgood)
-      obj.initfracgood=initfracgood;
-      obj.initngood=obj.ngood;
-      obj.randtargets=1000;
-      obj.goodseqs=1:obj.randtargets;
-      obj.prefix=prefix;
-      obj.tgtCleave=tgtCleave;
+      obj.ndna=zeros(6,2);
+      obj.ndna(obj.TYPE_T7W,obj.GOOD)=ngood;
+      obj.ndna(obj.TYPE_T7W,obj.BAD)=obj.moles(initvol,initconc)-ngood;
+      obj.initfracgood=ngood/sum(obj.ndna(:));
+      obj.initngood=ngood;
+      obj.randtargets=min(ngood,1000);
+      obj.goodseqs=cell(1,6);
+      obj.goodseqs{obj.TYPE_T7W}=1:obj.randtargets;
       obj.history=[];
-      obj.setPoolCleavage(poolCleavage);
-      obj.poolFrac=ones(size(poolCleavage))/length(poolCleavage);
-      fprintf('Initial prefix=%s, Target cleavage=[%.2f, %.2f], Initial good=%.3g bad=%.2g\n',obj.prefix,obj.tgtCleave,obj.ngood, obj.nbad);
-      obj.printdiv('Initial');
+      fprintf('Initial good=%.3g bad=%.2g\n',obj.ngood(), obj.nbad());
+      obj.printdiv('Initial',1);
       obj.cumcost=0;
+      obj.rnaLength=108;
+      extLength=71;   % Length added to cDNA beyond RNA end due to RT primer
+      obj.mw=zeros(1,6);
+      obj.mw(obj.TYPE_W)=obj.MWssDNA(obj.rnaLength+extLength);
+      obj.mw(obj.TYPE_NP)=obj.MWssDNA(obj.rnaLength+extLength-20);
+      obj.mw(obj.TYPE_T7W)=obj.MWdsDNA(obj.rnaLength+21);
+      obj.mw(obj.TYPE_CIRC)=obj.mw(obj.TYPE_NP);
+      obj.mw(obj.TYPE_URNA)=obj.MWRNA(obj.rnaLength);
+      obj.mw(obj.TYPE_CRNA)=obj.mw(obj.TYPE_URNA);   % Counts the 5' cleavage product too
+      obj.active=obj.TYPE_T7W;
     end
 
-    function setPoolCleavage(obj,poolCleavage)
-    % Update pool cleavage to given setting
-      obj.poolCleavage=poolCleavage;
-      obj.poolFrac=ones(size(poolCleavage))/length(poolCleavage);
+    function [nu,n]=nunique(obj)
+    % Compute the mean number of copies of each good sequence
+      nu=unique(obj.goodseqs{obj.active});
+      n=length(obj.goodseqs{obj.active});
     end
 
     function k=kgood(obj)
     % Compute the mean number of copies of each good sequence
-      k=length(obj.goodseqs)/length(unique(obj.goodseqs));
+      [nu,n]=obj.nunique();
+      k=n/nu;
+    end
+    
+    function n=ngood(obj)
+      n=sum(obj.ndna(:,obj.GOOD));
+    end
+
+    function n=nbad(obj)
+      n=sum(obj.ndna(:,obj.BAD));
     end
     
     function g=divtarget(obj)
     % Compute the fraction of the diversity target we are at
-      g=length(unique(obj.goodseqs))/obj.randtargets * obj.initngood;
+      nu=obj.nunique();
+      g=nu/obj.randtargets * obj.initngood;
     end
     
     function t=total(obj)
-      t=obj.ngood+obj.nbad;
+      t=sum(obj.ndna(:));
     end
 
     function f=fracgood(obj)
-      f=obj.ngood/obj.total();
+      f=obj.ngood()/obj.total();
     end
     
-    function c=conc(obj)
+    function c=conc(obj,typ,goodbad)
     % Concentration in nM
-      c=obj.total()/(obj.volume*1e-6)/6.022e23*1e9;
+      if nargin<2 || isempty(typ)
+        typ=1:size(obj.ndna,1);
+      end
+      if nargin<3 || isempty(goodbad)
+        goodbad=1:2;
+      end
+      c=sum(sum(obj.ndna(typ,goodbad)))/(obj.volume*1e-6)/6.022e23*1e9;
     end
         
-    function printdiv(obj,note)
-      fprintf('%-50.50s   %2s %5.0ful %6.1fnM Total=%7.2g Enrich=%7.2g kgood=%8.2f goodseqs=%5.3g cumcost=$%3.0f\n',note,obj.prefix, obj.volume,obj.conc(),obj.total(),obj.fracgood()/obj.initfracgood, obj.kgood(), obj.divtarget(), obj.cumcost);
-      obj.history=[obj.history,struct('ngood',obj.ngood,'bad',obj.nbad,'divtarget',obj.divtarget,'note',note)];
+    function printdiv(obj,note, heading)
+      if nargin<3
+        heading=false;
+      end
+      concs='';
+      for i=1:size(obj.ndna,1)
+        concs=[concs,sprintf('%6.1f ',obj.conc(i))];
+      end
+      if heading
+        fprintf('%-50.50s    %5s %6s %6s %6s %6s %6s %6s\n','','Volume','W','NoPre','T7W','Circ','URNA','CRNA');
+      end
+      fprintf('%-50.50s   %5.0ful %snM Total=%7.2g Enrich=%7.2g kgood=%8.2f goodseqs=%5.0f cumcost=$%3.0f\n',note,obj.volume,concs,obj.total(),obj.fracgood()/obj.initfracgood, obj.kgood(), obj.divtarget(), obj.cumcost);
+      obj.history=[obj.history,struct('ngood',obj.ngood(),'bad',obj.nbad(),'divtarget',obj.divtarget,'note',note)];
     end
 
     function plothistory(obj)
@@ -120,9 +178,10 @@ classdef TRPTrack < matlab.mixin.Copyable
     
     function resample(obj,note,gain)
     % Resample (with replacement) pool with given gain
-      obj.ngood=obj.ngood*gain;
-      obj.nbad=obj.nbad*gain;
-      obj.goodseqs=randsample(obj.goodseqs,round(gain*length(obj.goodseqs)),true);
+      obj.ndna=obj.ndna*gain;
+      for i=1:length(obj.goodseqs)
+        obj.goodseqs{i}=randsample(obj.goodseqs{i},round(gain*length(obj.goodseqs{i})),true);
+      end
       obj.printdiv(sprintf('%s(gain=%.3f)',note,gain));
     end
 
@@ -152,9 +211,16 @@ classdef TRPTrack < matlab.mixin.Copyable
         error('Bad gains: %f, %f, %f\n', goodgain, badgain);
       end
       % Assume that there are exactly k copies of each sequence (TODO: does this reasonably approximate?)
-      obj.ngood=obj.ngood*goodgain;
-      obj.nbad=obj.nbad*badgain;
-      obj.goodseqs=randsample(obj.goodseqs,round(goodgain*length(obj.goodseqs)),false);
+      obj.ndna(:,obj.GOOD)=obj.ndna(:,obj.GOOD)*goodgain;
+      obj.ndna(:,obj.BAD)=obj.ndna(:,obj.BAD)*badgain;
+      for i=1:length(obj.goodseqs)
+        nsamp=round(goodgain*length(obj.goodseqs{i}));
+        if nsamp==0
+          obj.goodseqs{i}=[];
+        elseif length(obj.goodseqs{i})>1
+          obj.goodseqs{i}=randsample(obj.goodseqs{i},nsamp,false);
+        end
+      end
       if goodgain==badgain
         obj.printdiv(sprintf('%s(gain=%.3f)',note,goodgain));
       else
@@ -162,106 +228,172 @@ classdef TRPTrack < matlab.mixin.Copyable
       end
     end
 
-    function gamma=findGamma(obj,keepCleave,retentionFraction)
-    % Find scale factor for non-cleavers that results in given retentionFraction
-    % Assume (1-cleavage) is raised to some power 
-      if keepCleave
-        % i.e. retain(i)=1-(1-poolCleavage(i))^gamma;   sum(retain(i)*poolFrac(i))=retentionFraction
-        gamma=fminsearch(@(z) (sum((1-(1-obj.poolCleavage).^z).*obj.poolFrac)-retentionFraction)^2,1.0);
-      else
-        % Find scale factor for non-cleavers that results in given retentionFraction
-        % i.e. retain(i)=(1-poolCleavage(i))^gamma;   sum(retain(i)*poolFrac(i))=retentionFraction
-        gamma=fminsearch(@(z) (sum((1-obj.poolCleavage).^z.*obj.poolFrac)-retentionFraction)^2,1.0);
-      end
-    end
-      
-    function Select(obj,keepCleave,gamma)
-    % Choose molecules from the pool that either cleave or not (depending on keepCleave)
-    % The cleavage rate of the bad molecules is based on the empirical distribution poolCleavage and poolFrac.  
-    % Cleavage values are mapped to values that result in the observed retentionFraction
-      if keepCleave
-        retain=1-(1-obj.poolCleavage).^gamma;
-        tgtRetain=1-(1-obj.tgtCleave(2))^gamma;
-        meanRetain=sum(retain.*obj.poolFrac);
-        obj.prefix='-';
-        obj.randchoose(sprintf('Select(Clv,%.1f)',gamma),tgtRetain,meanRetain);
-      else
-        obj.prefix='W';
-        fprintf('Gamma=%.1f\n',gamma);
-        retain=(1-obj.poolCleavage).^gamma;
-        tgtRetain=(1-obj.tgtCleave(1))^gamma;
-        meanRetain=sum(retain.*obj.poolFrac);
-        obj.randchoose(sprintf('Select(Unclv,%.1f)',gamma),tgtRetain,meanRetain);
-      end
-      obj.poolFrac=obj.poolFrac.*retain;
-      obj.poolFrac=obj.poolFrac/sum(obj.poolFrac);
-    end
-    
-    function T7(obj,rnaconc)
+    function T7(obj,rnaconc,goodcleavage,badcleavage)
     % Transcribe the pool ending with the given RNA concentration
     % After this method, the pool will be referring to the RNA produced only, not including the template
       obj.cumcost=obj.cumcost+0.079*obj.volume;   % Price/ul of rx:  T7: .050 NTP .016, SuperaseIn .013
-      gain=rnaconc*obj.total()/(obj.conc()*(obj.ngood+obj.nbad));
-      obj.resample('T7',gain);
+      gain=rnaconc/obj.conc(obj.TYPE_T7W);
+      obj.ndna(obj.TYPE_URNA,obj.GOOD)=obj.ndna(obj.TYPE_T7W,obj.GOOD)*gain*(1-goodcleavage);
+      obj.ndna(obj.TYPE_CRNA,obj.GOOD)=obj.ndna(obj.TYPE_T7W,obj.GOOD)*gain*goodcleavage;
+      obj.ndna(obj.TYPE_URNA,obj.BAD)=obj.ndna(obj.TYPE_T7W,obj.BAD)*gain*(1-badcleavage);
+      obj.ndna(obj.TYPE_CRNA,obj.BAD)=obj.ndna(obj.TYPE_T7W,obj.BAD)*gain*badcleavage;
+      % Resample (with replacement) pool with given gain
+      obj.goodseqs{obj.TYPE_URNA}=[obj.goodseqs{obj.TYPE_URNA},randsample(obj.goodseqs{obj.TYPE_T7W},round((1-goodcleavage)*gain*length(obj.goodseqs{obj.TYPE_T7W})),true)];
+      obj.goodseqs{obj.TYPE_CRNA}=[obj.goodseqs{obj.TYPE_CRNA},randsample(obj.goodseqs{obj.TYPE_T7W},round(goodcleavage*gain*length(obj.goodseqs{obj.TYPE_T7W})),true)];
+      obj.printdiv(sprintf('T7(gain=%.3f,GoodClv=%.0f%%, BadClv=%.0f%%)',gain, goodcleavage*100, badcleavage*100));
     end
 
-    function BeadSep(obj, beadConc, efficiency)
-    % Bead separation with given bead conc (mg/ml) and efficiency
-      obj.randchoose('Bead separation',efficiency);
-      cost=1648/(100e3);   % Cost of 1ug of beads  based on $1648/(10ml * 10mg/ml) 
-      obj.cumcost=obj.cumcost+obj.volume*beadConc*cost;
-    end
-    
     function RT(obj, efficiency)
     % Reverse transcription
     % bad, good, all get same gain of efficiency
       obj.cumcost=obj.cumcost+.236*obj.volume;
       % Apply the gain
-      obj.randchoose('RT',efficiency);
+      obj.ndna(obj.TYPE_W,:)=obj.ndna(obj.TYPE_W,:)+obj.ndna(obj.TYPE_URNA,:)*efficiency;
+      obj.ndna(obj.TYPE_NP,:)=obj.ndna(obj.TYPE_NP,:)+obj.ndna(obj.TYPE_CRNA,:)*efficiency;
+      obj.ndna([obj.TYPE_URNA,obj.TYPE_CRNA],:)=0;  % Degrade RNA
+      nsamp=round(efficiency*length(obj.goodseqs{obj.TYPE_URNA}));
+      if nsamp>0
+        obj.goodseqs{obj.TYPE_W}=[obj.goodseqs{obj.TYPE_W},randsample(obj.goodseqs{obj.TYPE_URNA},nsamp,false)];
+      end
+      nsamp=round(efficiency*length(obj.goodseqs{obj.TYPE_CRNA}));
+      if nsamp>0
+        obj.goodseqs{obj.TYPE_NP}=[obj.goodseqs{obj.TYPE_NP},randsample(obj.goodseqs{obj.TYPE_CRNA},nsamp,false)];
+      end
+      obj.printdiv(sprintf('RT(eff=%.3f)',efficiency));
     end
     
-    function ligate(obj, prefix, efficiency)
-      obj.prefix=prefix;
-      obj.randchoose(sprintf('ligate(%s)',prefix),efficiency);
+    function ligate(obj, efficiency)
+      nligated=round(obj.ndna(obj.TYPE_NP,:)*efficiency);
+      obj.ndna(obj.TYPE_NP,:)=obj.ndna(obj.TYPE_NP,:)-nligated;
+      obj.ndna(obj.TYPE_CIRC,:)=obj.ndna(obj.TYPE_CIRC,:)+nligated;
+      samp=randsample(1:length(obj.goodseqs{obj.TYPE_NP}),nligated,false);
+      nsamp=setdiff(1:length(obj.goodseqs{obj.TYPE_NP}),samp);   % Not circularized ones
+      obj.goodseqs{obj.TYPE_CIRC}=[obj.goodseqs{obj.TYPE_CIRC},obj.goodseqs{obj.TYPE_NP}(samp)];
+      obj.goodseqs{obj.TYPE_W}=[obj.goodseqs{obj.TYPE_NP},obj.goodseqs{obj.TYPE_NP}(nsamp)];
+      obj.printdiv(sprintf('Ligate(eff=%.3f)',efficiency));
       obj.cumcost=obj.cumcost+.0002*obj.volume;
     end
     
-    function gain=PCR(obj,ncycles,isds)
+    function exo(obj,residual)
+    % Exo digestion -- remove all DNA but circ
+      if nargin<2
+        residual=0;
+      end
+      remove=[obj.TYPE_W,obj.TYPE_NP,obj.TYPE_T7W];
+      % Some residual of T7W will appear as W prefix
+      obj.ndna(obj.TYPE_W,:)=obj.ndna(obj.TYPE_T7W,:)*residual;
+      obj.ndna(obj.TYPE_T7W,:)=0;
+      obj.ndna(obj.TYPE_NP,:)=0;
+      obj.goodseqs{obj.TYPE_W}=randsample(obj.goodseqs{obj.TYPE_T7W},round(length(obj.goodseqs{obj.TYPE_T7W})*residual),false);
+      obj.goodseqs{obj.TYPE_T7W}=0;
+      obj.goodseqs{obj.TYPE_NP}=0;
+      obj.printdiv(sprintf('Exo(resid=%.2f)',residual));
+    end
+    
+    function qpcr(obj,note,t7,w)
+    % Note qPCR measurement (in nM)
+      if nargin<4
+        w=nan;
+      end
+      obs=nan(size(obj.ndna,1),1);
+      relcirc=sum(obj.ndna(obj.TYPE_CIRC,:))/sum(sum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7W],:)));
+      obs(obj.TYPE_CIRC)=t7*relcirc;
+      obs(obj.TYPE_T7W)=t7*(1-relcirc);
+      obs(obj.TYPE_W)=w-t7;
+      concs='';
+      for i=1:size(obj.ndna,1)
+        concs=[concs,sprintf('%6.1f ',obs(i))];
+      end
+      total=0;
+      for i=1:length(obs)
+        if isfinite(obs(i))
+          total=total+obj.conc(i);
+        end
+      end
+      rel=nansum(obs)/total;
+      fprintf('%-50.50s           %snM Relative=%.2f\n',sprintf('qPCR(%.1f,%.1f): %s',t7,w,note),concs,rel);
+    end
+    
+    function qubitdna(obj,note,ngul)
+    % Qubit HS DNA concentration as given
+      ssFactor=0.20;     % Assume ssDNA reads at ~20% of dsDNA
+      factors=[1 ssFactor ssFactor ssFactor 0 0];
+      allconc=[];
+      for i=1:size(obj.ndna,1)
+        allconc(i)=obj.conc(i);
+      end
+      expect=allconc.*factors.*obj.mw*1e-9*1000;
+      scale=ngul/nansum(expect);
+      obs=expect*scale./factors./obj.mw/1e-9/1000;
+      obs(factors==0)=0;
+      fprintf('%-50.50s           %snM  Relative=%.2f\n',sprintf('qubit HS DNA(%.1f ng/ul) %s',ngul,note),sprintf('%6.1f ',obs),scale);
+    end
+
+    function qubitrna(obj,note,ngul)
+    % Qubit HS RNA concentration as given
+      factors=[0 0 0 0 1 1];
+      allconc=[];
+      for i=1:size(obj.ndna,1)
+        allconc(i)=obj.conc(i);
+      end
+      expect=allconc.*factors.*obj.mw*1e-9*1000;
+      scale=ngul/nansum(expect);
+      obs=expect*scale./factors./obj.mw/1e-9/1000;
+      obs(factors==0)=0;
+      fprintf('%-50.50s           %snM  Relative=%.2f\n',sprintf('qubit RNA(%.1f ng/ul) %s',ngul,note),sprintf('%6.1f ',obs),scale);
+    end
+
+    function gain=PCR(obj,ncycles,maxconc)
     % PCR amplify the pool to the given final volume and concentration
     % Assumes perfect amplication and uniform copying of all input molecules
-    % isds can be set to true to indicate the input is double-stranded; otherwise, if omitted, assumes input is single-stranded cDNA
-      if nargin<4
-        isds=false;
-      end
       
       % Initial S1 to forward strand (same direction as RNA), S2 as reverse strand
-      if isds
-        S1=struct('nbad',obj.nbad,'ngood',obj.ngood,'goodseqs',obj.goodseqs);
-      else
-        S1=struct('nbad',0,'ngood',0,'goodseqs',[1]);  % Keep 1 sequence to avoid errors later
-      end
-      S2=struct('nbad',obj.nbad,'ngood',obj.ngood,'goodseqs',obj.goodseqs);
+      S1=struct('nbad',sum(obj.ndna([obj.TYPE_T7W],obj.BAD)),...
+                'ngood',sum(obj.ndna([obj.TYPE_T7W],obj.GOOD)),...
+                'goodseqs',[obj.goodseqs{obj.TYPE_T7W}]);
+      S2=struct('nbad',sum(obj.ndna([obj.TYPE_T7W,obj.TYPE_CIRC],obj.BAD)),...
+                'ngood',sum(obj.ndna([obj.TYPE_T7W,obj.TYPE_CIRC],obj.GOOD)),...
+                'goodseqs',[obj.goodseqs{obj.TYPE_T7W},obj.goodseqs{obj.TYPE_CIRC}]);
 
+      if nargin<3
+        maxconc=175;
+      end
+      maxn=maxconc*1e-9*6.022e23*obj.volume*1e-6;
       for i=1:ncycles
         % Update
         %fprintf('S1=%.2g %.2g S2=%.2g %.2g \n', S1.nbad, S1.ngood, S2.nbad, S2.ngood);
-        S1new=struct('nbad',S1.nbad+S2.nbad,...
-                     'ngood',S1.ngood+S2.ngood,...
-                     'goodseqs',[S1.goodseqs,randsample(S2.goodseqs,round(length(S2.goodseqs)))]);
-        S2new=struct('nbad',S2.nbad+S1.nbad,...
-                     'ngood',S2.ngood+S1.ngood,...
-                     'goodseqs',[S2.goodseqs,randsample(S1.goodseqs,round(length(S1.goodseqs)))]);
+        g1=min(1,(maxn-S1.nbad-S1.ngood)/(S2.nbad+S2.ngood));
+        S1new=struct('nbad',S1.nbad+S2.nbad*g1,...
+                     'ngood',S1.ngood+S2.ngood*g1,...
+                     'goodseqs',S1.goodseqs);
+        nsamp=round(g1*length(S2.goodseqs));
+        if nsamp>0
+          S1new.goodseqs=[S1.goodseqs,randsample(S2.goodseqs,nsamp,false)];
+        end
+        g2=min(1,(maxn-S2.nbad-S2.ngood)/(S1.nbad+S1.ngood));
+        S2new=struct('nbad',S2.nbad+S1.nbad*g2,...
+                     'ngood',S2.ngood+S1.ngood*g2,...
+                     'goodseqs',S2.goodseqs);
+        nsamp=round(g2*length(S1.goodseqs));
+        if nsamp>0
+          if length(S1.goodseqs)<=1
+            S2new.goodseqs=[S2.goodseqs,S1.goodseqs];
+          else
+            S2new.goodseqs=[S2.goodseqs,randsample(S1.goodseqs,nsamp,false)];
+          end
+        end
         S1=S1new;
         S2=S2new;
+        fprintf('Cycle %d: g1=%.2f, g2=%.2f\n', i, g1, g2);
       end
-      obj.goodseqs=S2.goodseqs;   % Reverse-complement strand is template for future transcription
+      obj.goodseqs{obj.TYPE_T7W}=[obj.goodseqs{obj.TYPE_T7W},S2.goodseqs];   % Reverse-complement strand is template for future transcription
       fprintf('S1=%.2g %.2g  S2=%.2g %.2g\n', S1.nbad, S1.ngood, S2.nbad, S2.ngood);
       % No change to number of good sequences since sampling is uniform
-      oldtotal=obj.total;
-      % During last cycle, assume everything got extended so all parameters are aveages
-      obj.ngood=mean([S1.ngood,S2.ngood]);
-      obj.nbad=mean([S1.nbad,S2.nbad]);
-      gain=obj.total/oldtotal;
+      oldtotal=obj.total();
+      % During last cycle, assume everything got extended so all parameters are averages
+      obj.ndna(obj.TYPE_T7W,obj.GOOD)=S2.ngood;
+      obj.ndna(obj.TYPE_T7W,obj.BAD)=S2.nbad;
+      gain=obj.total()/oldtotal;
       obj.cumcost=obj.cumcost+obj.volume*263/250/50;  % Kapa is $263/250U, uses 1U/50ul
       obj.printdiv(sprintf('PCR (gain=%.3f)',gain));
     end
@@ -279,6 +411,13 @@ classdef TRPTrack < matlab.mixin.Copyable
       gain=volume/obj.volume;
       obj.volume=volume;
       obj.randchoose(note,gain);
+    end
+
+    function cleanup(obj,note,volume,efficiency)
+      obj.volume=volume;
+      keyboard
+      obj.randchoose(note,efficiency);
+      keyboard
     end
   end
 end
