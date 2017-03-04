@@ -81,7 +81,7 @@ classdef TRPTrack < matlab.mixin.Copyable
         note='Initial';
       end
       obj.printdiv(note,true);
-      obj.cumcost=0;
+      obj.cumcost=initvol*initconc/1e6*235;   % Template cost
       obj.rnaLength=108;
       extLength=71;   % Length added to cDNA beyond RNA end due to RT primer
       obj.mw=zeros(1,6);
@@ -250,19 +250,14 @@ classdef TRPTrack < matlab.mixin.Copyable
       end
     end
 
-    function T7(obj,rnaconc,goodcleavage,bulkcleavage)
+    function T7(obj,rnaconc,goodcleavage,badcleavage)
     % Transcribe the pool ending with the given RNA concentration
     % After this method, the pool will be referring to the RNA produced only, not including the template
       obj.cumcost=obj.cumcost+0.079*obj.volume;   % Price/ul of rx:  T7: .050 NTP .016, SuperaseIn .013
       gain=rnaconc/obj.conc(obj.TYPE_T7W);
       obj.ndna(obj.TYPE_URNA,obj.GOOD)=obj.ndna(obj.TYPE_T7W,obj.GOOD)*gain*(1-goodcleavage);
       obj.ndna(obj.TYPE_CRNA,obj.GOOD)=obj.ndna(obj.TYPE_T7W,obj.GOOD)*gain*goodcleavage;
-      % Compute badcleavage based on bulk and good
-      badcleavage=(bulkcleavage*sum(obj.ndna(obj.TYPE_T7W,:))-goodcleavage*obj.ndna(obj.TYPE_T7W,obj.GOOD))/obj.ndna(obj.TYPE_T7W,obj.BAD);
-      if badcleavage<0
-        fprintf('*** cleavage of (%.1f%%,%.1f%%) implies bad molecule cleavage < 0\n',goodcleavage*100,bulkcleavage*100);
-        badcleavage=0;
-      end
+      bulkcleavage=(badcleavage*obj.ndna(obj.TYPE_T7W,obj.BAD)+goodcleavage*obj.ndna(obj.TYPE_T7W,obj.GOOD))/sum(obj.ndna(obj.TYPE_T7W,:));
       %fprintf('good=%g, bulk=%g, bad=%g\n',goodcleavage, bulkcleavage, badcleavage);
       obj.ndna(obj.TYPE_URNA,obj.BAD)=obj.ndna(obj.TYPE_T7W,obj.BAD)*gain*(1-badcleavage);
       obj.ndna(obj.TYPE_CRNA,obj.BAD)=obj.ndna(obj.TYPE_T7W,obj.BAD)*gain*badcleavage;
@@ -373,8 +368,8 @@ classdef TRPTrack < matlab.mixin.Copyable
     
     function qubitdna(obj,note,ngul)
     % Qubit HS DNA concentration as given
-      ssFactor=0.20;     % Assume ssDNA reads at ~20% of dsDNA
-      factors=[1 ssFactor ssFactor ssFactor 0 0];
+      ssFactor=1.0;     % Assume ssDNA reads at ssFactor of dsDNA
+      factors=[ssFactor ssFactor 1.0 ssFactor 0 0];
       allconc=[];
       for i=1:size(obj.ndna,1)
         allconc(i)=obj.conc(i);
@@ -400,6 +395,27 @@ classdef TRPTrack < matlab.mixin.Copyable
       obj.printmeasure(sprintf('qubit RNA(%.1f ng/ul) %s',ngul,note),obs,scale);
     end
 
+    function nanodrop(obj,note,ngul,r1,r2)
+      ratios='';
+      if nargin>=4
+        ratios=[ratios,sprintf(' %.2f',r1)];
+      end
+      if nargin>=5
+        ratios=[ratios,sprintf(' %.2f',r2)];
+      end
+      a260=ngul/50;    % Assume was set for DNA-50
+      factors=[1/33 1/33 1/50 1/33 1/40 1/40];
+      allconc=[];
+      for i=1:size(obj.ndna,1)
+        allconc(i)=obj.conc(i);
+      end
+      expect=allconc.*factors.*obj.mw*1e-9*1000;
+      scale=a260/nansum(expect);
+      obs=expect*scale./factors./obj.mw/1e-9/1000;
+      obs(factors==0)=nan;
+      obj.printmeasure(sprintf('Nanodrop(%.1f ng/ul%s) %s',ngul,ratios,note),obs,scale);
+    end
+      
     function gain=PCR(obj,ncycles,maxconc)
     % PCR amplify the pool to the given final volume and concentration
     % Assumes perfect amplication and uniform copying of all input molecules
