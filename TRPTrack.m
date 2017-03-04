@@ -4,15 +4,16 @@ classdef TRPTrack < matlab.mixin.Copyable
   properties
     volume; % Volume in ul
     ndna;   % ndna(type,goodbad) - type 1=W, 2=no prefix, 3=T7W, 4=circ, 5-W_RNA, 6-clvd RNA; goodbad 1=good, 2=bad
-    initfracgood;
-    initngood;
     history;
     cumcost;
+    initfracgood;  % initfracgood is the initial fraction of the total pool that is "good"
     randtargets;   % Number of unique random numbers to use for good seqs
+    trackfrac;	   % Number of tracked molecules per good molecule (i.e. length(goodseqs)/ndna(GOOD) )
     goodseqs;  	   % goodseqs{type} - Each value in this vector represents a unique sequence, keeps empirical distribution
     rnaLength;  % Uncleaved RNA length in nt
     mw;		% Molecular weight of each type
     active;	% Currently active stage (i.e. which is the relevant goodseqs)
+    id;		% ID of current sample
   end
 
   properties (Constant)
@@ -51,22 +52,34 @@ classdef TRPTrack < matlab.mixin.Copyable
   
   
   methods
-    function obj=TRPTrack(initvol, initconc, ngood)
+    function obj=TRPTrack(initvol, initconc, ngood, id, note)
     % initialize pool with given volume (in ul) and concentration (in nM)
-    % initfracgood is the fraction of the total pool that is "good"
     % poolFitness is an empirical distribution of the cleavage of the pool, each value is equally probable
       obj.volume=initvol;
       obj.ndna=zeros(6,2);
       obj.ndna(obj.TYPE_T7W,obj.GOOD)=ngood;
       obj.ndna(obj.TYPE_T7W,obj.BAD)=obj.moles(initvol,initconc)-ngood;
-      obj.initfracgood=ngood/sum(obj.ndna(:));
-      obj.initngood=ngood;
-      obj.randtargets=min(ngood,1000);
+      obj.initfracgood=obj.fracgood();    
+      obj.trackfrac=1000/sum(obj.ndna(:,obj.GOOD));
       obj.goodseqs=cell(1,6);
-      obj.goodseqs{obj.TYPE_T7W}=1:obj.randtargets;
+      icnt=1;
+      for i=1:size(obj.ndna,1)
+        n=round(obj.ndna(i,obj.GOOD)*obj.trackfrac);
+        obj.goodseqs{i}=icnt:icnt+n-1;
+        icnt=icnt+n;
+      end
+      obj.active=obj.TYPE_T7W;
       obj.history=[];
-      fprintf('Initial good=%.3g bad=%.2g\n',obj.ngood(), obj.nbad());
-      obj.printdiv('Initial',1);
+      if nargin>=4
+        obj.id=id;
+      else
+        obj.id='';
+      end
+      %fprintf('Initial good=%.3g bad=%.2g\n',obj.ngood(), obj.nbad());
+      if nargin<5
+        note='Initial';
+      end
+      obj.printdiv(note,true);
       obj.cumcost=0;
       obj.rnaLength=108;
       extLength=71;   % Length added to cDNA beyond RNA end due to RT primer
@@ -77,12 +90,11 @@ classdef TRPTrack < matlab.mixin.Copyable
       obj.mw(obj.TYPE_CIRC)=obj.mw(obj.TYPE_NP);
       obj.mw(obj.TYPE_URNA)=obj.MWRNA(obj.rnaLength);
       obj.mw(obj.TYPE_CRNA)=obj.mw(obj.TYPE_URNA);   % Counts the 5' cleavage product too
-      obj.active=obj.TYPE_T7W;
     end
 
     function [nu,n]=nunique(obj)
     % Compute the mean number of copies of each good sequence
-      nu=unique(obj.goodseqs{obj.active});
+      nu=length(unique(obj.goodseqs{obj.active}));
       n=length(obj.goodseqs{obj.active});
     end
 
@@ -130,14 +142,22 @@ classdef TRPTrack < matlab.mixin.Copyable
         heading=false;
       end
       concs='';
+      marker=' *';
       for i=1:size(obj.ndna,1)
-        concs=[concs,sprintf('%6.1f ',obj.conc(i))];
+        concs=[concs,sprintf('%6.1f%c',obj.conc(i),marker((i==obj.active)+1))];
       end
       if heading
-        fprintf('%-50.50s    %5s %6s %6s %6s %6s %6s %6s\n','','Volume','W','NoPre','T7W','Circ','URNA','CRNA');
+        fprintf('\n%-7.7s%-50.50s    %5s %6s %6s %6s %6s %6s %6s      Total  Enrich    kGood NGood Cost\n','ID','Desc','Volume','W','NoPre','T7W','Circ','URNA','CRNA');
+        fprintf('%s\n',repmat('-',148,1));
       end
-      fprintf('%-50.50s   %5.0ful %snM Total=%7.2g Enrich=%7.2g kgood=%8.2f goodseqs=%5.0f cumcost=$%3.0f\n',note,obj.volume,concs,obj.total(),obj.fracgood()/obj.initfracgood, obj.kgood(), obj.divtarget(), obj.cumcost);
-      obj.history=[obj.history,struct('ngood',obj.ngood(),'bad',obj.nbad(),'divtarget',obj.divtarget,'note',note)];
+      fprintf('%-7.7s%-50.50s   %5.0ful %snM %7.2g %7.2g %8.2f %5.0f $%3.0f\n',obj.id,note,obj.volume,concs,obj.total(),obj.fracgood()/obj.initfracgood, obj.kgood(), obj.nunique(), obj.cumcost);
+      obj.history=[obj.history,struct('ngood',obj.ngood(),'bad',obj.nbad(),'nunique',obj.nunique,'note',note)];
+      for i=1:length(obj.goodseqs)
+        if abs(obj.ndna(i,1)-length(obj.goodseqs{i}))>1  && abs(obj.ndna(i,1)/length(obj.goodseqs{i})-1)>0.01
+          fprintf('ndna(%d,1)=%.0f, length(goodseqs)=%d\n', i, obj.ndna(i,1), length(obj.goodseqs{i}));
+          keyboard;
+        end
+      end
     end
 
     function plothistory(obj)
@@ -151,7 +171,7 @@ classdef TRPTrack < matlab.mixin.Copyable
       subplot(212);
       h=semilogy([obj.history.ngood],'-o');
       hold on;
-      h(2)=semilogy([obj.history.divtarget],'-o');
+      h(2)=semilogy([obj.history.nunique],'-o');
       legend(h,{'good','good sequences'});
       set(gca,'XTick',1:length(obj.history));
       set(gca,'XTickLabel',{obj.history.note});
@@ -168,12 +188,12 @@ classdef TRPTrack < matlab.mixin.Copyable
       end
       cnt=hist(obj.goodseqs,1:max(obj.goodseqs));
       [dist,n]=hist(cnt,0:max(cnt));
-      dist=dist/sum(dist)*obj.divtarget();
+      dist=dist/sum(dist)*obj.nunique();
       setfig(ti);clf;
       plot(n(n>0),dist(n>0),'o-');
       xlabel('Number of copies of sequence');
       ylabel('Number of sequences');
-      title(sprintf('%s: Total of %.2f sequences with mean of %.2f copies',ti, obj.divtarget(), obj.kgood()));
+      title(sprintf('%s: Total of %.2f sequences with mean of %.2f copies',ti, obj.nunique(), obj.kgood()));
     end
     
     function resample(obj,note,gain)
@@ -214,7 +234,8 @@ classdef TRPTrack < matlab.mixin.Copyable
       obj.ndna(:,obj.GOOD)=obj.ndna(:,obj.GOOD)*goodgain;
       obj.ndna(:,obj.BAD)=obj.ndna(:,obj.BAD)*badgain;
       for i=1:length(obj.goodseqs)
-        nsamp=round(goodgain*length(obj.goodseqs{i}));
+        nsamp=round(obj.ndna(i,obj.GOOD));
+        assert(nsamp<=length(obj.goodseqs{i}));
         if nsamp==0
           obj.goodseqs{i}=[];
         elseif length(obj.goodseqs{i})>1
@@ -240,6 +261,7 @@ classdef TRPTrack < matlab.mixin.Copyable
       % Resample (with replacement) pool with given gain
       obj.goodseqs{obj.TYPE_URNA}=[obj.goodseqs{obj.TYPE_URNA},randsample(obj.goodseqs{obj.TYPE_T7W},round((1-goodcleavage)*gain*length(obj.goodseqs{obj.TYPE_T7W})),true)];
       obj.goodseqs{obj.TYPE_CRNA}=[obj.goodseqs{obj.TYPE_CRNA},randsample(obj.goodseqs{obj.TYPE_T7W},round(goodcleavage*gain*length(obj.goodseqs{obj.TYPE_T7W})),true)];
+      obj.active=obj.TYPE_CRNA;
       obj.printdiv(sprintf('T7(gain=%.3f,GoodClv=%.0f%%, BadClv=%.0f%%)',gain, goodcleavage*100, badcleavage*100));
     end
 
@@ -259,6 +281,9 @@ classdef TRPTrack < matlab.mixin.Copyable
       if nsamp>0
         obj.goodseqs{obj.TYPE_NP}=[obj.goodseqs{obj.TYPE_NP},randsample(obj.goodseqs{obj.TYPE_CRNA},nsamp,false)];
       end
+      obj.goodseqs{obj.TYPE_URNA}=[];
+      obj.goodseqs{obj.TYPE_CRNA}=[];
+      obj.active=obj.TYPE_NP;
       obj.printdiv(sprintf('RT(eff=%.3f)',efficiency));
     end
     
@@ -269,7 +294,8 @@ classdef TRPTrack < matlab.mixin.Copyable
       samp=randsample(1:length(obj.goodseqs{obj.TYPE_NP}),nligated,false);
       nsamp=setdiff(1:length(obj.goodseqs{obj.TYPE_NP}),samp);   % Not circularized ones
       obj.goodseqs{obj.TYPE_CIRC}=[obj.goodseqs{obj.TYPE_CIRC},obj.goodseqs{obj.TYPE_NP}(samp)];
-      obj.goodseqs{obj.TYPE_W}=[obj.goodseqs{obj.TYPE_NP},obj.goodseqs{obj.TYPE_NP}(nsamp)];
+      obj.goodseqs{obj.TYPE_NP}=obj.goodseqs{obj.TYPE_NP}(nsamp);
+      obj.active=obj.TYPE_CIRC;
       obj.printdiv(sprintf('Ligate(eff=%.3f)',efficiency));
       obj.cumcost=obj.cumcost+.0002*obj.volume;
     end
@@ -290,6 +316,25 @@ classdef TRPTrack < matlab.mixin.Copyable
       obj.printdiv(sprintf('Exo(resid=%.2f)',residual));
     end
     
+    function printmeasure(obj,note,obs)
+      total=0;
+      for i=1:length(obs)
+        if isfinite(obs(i))
+          total=total+obj.conc(i);
+        end
+      end
+      rel=nansum(obs)/total;
+      str=repmat('*',1,round(rel*10));
+      if length(str)>10
+        str(10)='|';
+      end
+      if length(str)>20
+        str(20)='|';
+      end
+      str=['|',str];
+      fprintf('%-7.7s%50.50s           %snM                                     %4.2f %s\n','',note,sprintf('%6.1f ',obs),rel,str);
+    end
+    
     function qpcr(obj,note,t7,w)
     % Note qPCR measurement (in nM)
       if nargin<4
@@ -300,18 +345,7 @@ classdef TRPTrack < matlab.mixin.Copyable
       obs(obj.TYPE_CIRC)=t7*relcirc;
       obs(obj.TYPE_T7W)=t7*(1-relcirc);
       obs(obj.TYPE_W)=w-t7;
-      concs='';
-      for i=1:size(obj.ndna,1)
-        concs=[concs,sprintf('%6.1f ',obs(i))];
-      end
-      total=0;
-      for i=1:length(obs)
-        if isfinite(obs(i))
-          total=total+obj.conc(i);
-        end
-      end
-      rel=nansum(obs)/total;
-      fprintf('%-50.50s           %snM Relative=%.2f\n',sprintf('qPCR(%.1f,%.1f): %s',t7,w,note),concs,rel);
+      obj.printmeasure(sprintf('qPCR(%.1f,%.1f) %s',t7,w,note),obs);
     end
     
     function qubitdna(obj,note,ngul)
@@ -325,8 +359,8 @@ classdef TRPTrack < matlab.mixin.Copyable
       expect=allconc.*factors.*obj.mw*1e-9*1000;
       scale=ngul/nansum(expect);
       obs=expect*scale./factors./obj.mw/1e-9/1000;
-      obs(factors==0)=0;
-      fprintf('%-50.50s           %snM  Relative=%.2f\n',sprintf('qubit HS DNA(%.1f ng/ul) %s',ngul,note),sprintf('%6.1f ',obs),scale);
+      obs(factors==0)=nan;
+      obj.printmeasure(sprintf('qubit HS DNA(%.1f ng/ul) %s',ngul,note),obs);
     end
 
     function qubitrna(obj,note,ngul)
@@ -339,8 +373,8 @@ classdef TRPTrack < matlab.mixin.Copyable
       expect=allconc.*factors.*obj.mw*1e-9*1000;
       scale=ngul/nansum(expect);
       obs=expect*scale./factors./obj.mw/1e-9/1000;
-      obs(factors==0)=0;
-      fprintf('%-50.50s           %snM  Relative=%.2f\n',sprintf('qubit RNA(%.1f ng/ul) %s',ngul,note),sprintf('%6.1f ',obs),scale);
+      obs(factors==0)=nan;
+      obj.printmeasure(sprintf('qubit RNA(%.1f ng/ul) %s',ngul,note),obs);
     end
 
     function gain=PCR(obj,ncycles,maxconc)
@@ -384,17 +418,18 @@ classdef TRPTrack < matlab.mixin.Copyable
         end
         S1=S1new;
         S2=S2new;
-        fprintf('Cycle %d: g1=%.2f, g2=%.2f\n', i, g1, g2);
+        %fprintf('Cycle %d: g1=%.2f, g2=%.2f\n', i, g1, g2);
       end
       obj.goodseqs{obj.TYPE_T7W}=[obj.goodseqs{obj.TYPE_T7W},S2.goodseqs];   % Reverse-complement strand is template for future transcription
-      fprintf('S1=%.2g %.2g  S2=%.2g %.2g\n', S1.nbad, S1.ngood, S2.nbad, S2.ngood);
+      %fprintf('S1=%.2g %.2g  S2=%.2g %.2g\n', S1.nbad, S1.ngood, S2.nbad, S2.ngood);
       % No change to number of good sequences since sampling is uniform
       oldtotal=obj.total();
       % During last cycle, assume everything got extended so all parameters are averages
-      obj.ndna(obj.TYPE_T7W,obj.GOOD)=S2.ngood;
-      obj.ndna(obj.TYPE_T7W,obj.BAD)=S2.nbad;
+      obj.ndna(obj.TYPE_T7W,obj.GOOD)=obj.ndna(obj.TYPE_T7W,obj.GOOD)+S2.ngood;
+      obj.ndna(obj.TYPE_T7W,obj.BAD)=obj.ndna(obj.TYPE_T7W,obj.BAD)+S2.nbad;
       gain=obj.total()/oldtotal;
       obj.cumcost=obj.cumcost+obj.volume*263/250/50;  % Kapa is $263/250U, uses 1U/50ul
+      obj.active=obj.TYPE_T7W;
       obj.printdiv(sprintf('PCR (gain=%.3f)',gain));
     end
 
@@ -415,9 +450,7 @@ classdef TRPTrack < matlab.mixin.Copyable
 
     function cleanup(obj,note,volume,efficiency)
       obj.volume=volume;
-      keyboard
       obj.randchoose(note,efficiency);
-      keyboard
     end
   end
 end
