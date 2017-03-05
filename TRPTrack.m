@@ -7,7 +7,6 @@ classdef TRPTrack < matlab.mixin.Copyable
     history;
     cumcost;
     initfracgood;  % initfracgood is the initial fraction of the total pool that is "good"
-    randtargets;   % Number of unique random numbers to use for good seqs
     trackfrac;	   % Number of tracked molecules per good molecule (i.e. length(goodseqs)/ndna(GOOD) )
     goodseqs;  	   % goodseqs{type} - Each value in this vector represents a unique sequence, keeps empirical distribution
     rnaLength;  % Uncleaved RNA length in nt
@@ -52,7 +51,7 @@ classdef TRPTrack < matlab.mixin.Copyable
   
   
   methods
-    function obj=TRPTrack(initvol, initconc, fracgood, id, note)
+    function obj=TRPTrack(initvol, initconc, fracgood, id, note, trackfrac)
     % initialize pool with given volume (in ul) and concentration (in nM)
     % poolFitness is an empirical distribution of the cleavage of the pool, each value is equally probable
       obj.volume=initvol;
@@ -61,7 +60,11 @@ classdef TRPTrack < matlab.mixin.Copyable
       obj.ndna(obj.TYPE_T7W,obj.GOOD)=nmolecules*fracgood;
       obj.ndna(obj.TYPE_T7W,obj.BAD)=nmolecules*(1-fracgood);
       obj.initfracgood=obj.fracgood();    
-      obj.trackfrac=1000/sum(obj.ndna(:,obj.GOOD));
+      if nargin>=6
+        obj.trackfrac=trackfrac;
+      else
+        obj.trackfrac=1000/sum(obj.ndna(:,obj.GOOD));
+      end
       obj.goodseqs=cell(1,6);
       icnt=1;
       for i=1:size(obj.ndna,1)
@@ -93,6 +96,55 @@ classdef TRPTrack < matlab.mixin.Copyable
       obj.mw(obj.TYPE_CRNA)=obj.mw(obj.TYPE_URNA);   % Counts the 5' cleavage product too
     end
 
+    function changetrackfrac(obj,newfrac)
+    % Reduce the tracking fraction to match o2
+      fprintf('Updating tracking fraction of %s from %g to %g (by %g)\n', obj.id, obj.trackfrac, newfrac, newfrac/obj.trackfrac);
+      minid=inf;
+      maxid=0;
+      for i=1:length(obj.goodseqs)
+        minid=min([minid,obj.goodseqs{i}]);
+        maxid=max([maxid,obj.goodseqs{i}]);
+      end
+      while newfrac>obj.trackfrac
+        % replicate each entry
+        offset=maxid-minid+1;
+        for i=1:length(obj.goodseqs)
+          obj.goodseqs{i}=[obj.goodseqs{i},obj.goodseqs{i}+offset];
+        end
+        maxid=maxid+offset;
+        obj.trackfrac=obj.trackfrac*2;
+      end
+      if (newfrac<obj.trackfrac)
+        % Reduce maxid
+        maxid=round((maxid-minid+1)*newfrac/obj.trackfrac+minid-1);
+        for i=1:length(obj.goodseqs)
+          obj.goodseqs{i}=obj.goodseqs{i}(obj.goodseqs{i}<=maxid);
+        end
+      end
+      obj.trackfrac=newfrac;
+      obj.printdiv('After updating trackfrac');
+    end
+  
+    function mix(obj,o2)
+    % Add another tracked set to this one
+      if o2.trackfrac<obj.trackfrac
+        o2.changetrackfrac(obj.trackfrac);
+      elseif obj.trackfrac<o2.trackfrac
+        obj.changetrackfrac(o2.trackfrac);
+      end
+
+      obj.ndna=obj.ndna+o2.ndna;
+      obj.cumcost=obj.cumcost+o2.cumcost;
+      obj.initfracgood=(obj.volume*obj.initfracgood+o2.volume*o2.initfracgood)/(obj.volume+o2.volume);
+      
+      offset=ceil(max(cellfun(@(z) max([z,0]), obj.goodseqs))/1000)*1000;
+      for i=1:length(obj.goodseqs)
+        obj.goodseqs{i}=[obj.goodseqs{i},o2.goodseqs{i}+offset];
+      end
+      obj.volume=obj.volume+o2.volume;
+      obj.printdiv(sprintf('Mix(%s)',o2.id));
+    end
+    
     function [nu,n]=nunique(obj)
     % Compute the mean number of copies of each good sequence
       nu=length(unique(obj.goodseqs{obj.active}));
@@ -111,12 +163,6 @@ classdef TRPTrack < matlab.mixin.Copyable
 
     function n=nbad(obj)
       n=sum(obj.ndna(:,obj.BAD));
-    end
-    
-    function g=divtarget(obj)
-    % Compute the fraction of the diversity target we are at
-      nu=obj.nunique();
-      g=nu/obj.randtargets * obj.initngood;
     end
     
     function t=total(obj)
@@ -271,7 +317,13 @@ classdef TRPTrack < matlab.mixin.Copyable
     function RT(obj, efficiency)
     % Reverse transcription
     % bad, good, all get same gain of efficiency
+      stopconc=2000;
       obj.cumcost=obj.cumcost+.236*obj.volume;
+      rnaconc=obj.conc(obj.TYPE_URNA)+obj.conc(obj.TYPE_CRNA);
+      if rnaconc*efficiency>stopconc
+        efficiency=stopconc/rnaconc;
+        fprintf('Limiting RT efficiency to %.2f due to limited stop oligo\n', efficiency);
+      end
       % Apply the gain
       obj.ndna(obj.TYPE_W,:)=obj.ndna(obj.TYPE_W,:)+obj.ndna(obj.TYPE_URNA,:)*efficiency;
       obj.ndna(obj.TYPE_NP,:)=obj.ndna(obj.TYPE_NP,:)+obj.ndna(obj.TYPE_CRNA,:)*efficiency;
