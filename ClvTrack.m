@@ -252,8 +252,8 @@ classdef ClvTrack < matlab.mixin.Copyable
       obj.cumcost=obj.cumcost+.236*obj.volume;
       rnaconc=obj.conc(obj.TYPE_URNA)+obj.conc(obj.TYPE_CRNA);
       if rnaconc*efficiency>stopconc
-        efficiency=stopconc/rnaconc;
-        fprintf('Limiting RT efficiency to %.2f due to limited stop oligo\n', efficiency);
+        %efficiency=stopconc/rnaconc;
+        fprintf('Should be limiting RT efficiency to %.2f due to limited stop oligo\n', stopconc/rnaconc);
       end
       % Apply the gain
       nsamp=round(obj.ndna(obj.TYPE_URNA)*efficiency*obj.trackfrac);
@@ -331,25 +331,37 @@ classdef ClvTrack < matlab.mixin.Copyable
       fprintf('\n');
     end
     
-    function qpcr(obj,note,t7,w)
+    function qpcr(obj,note,t7,w,m)
     % Note qPCR measurement (in nM)
       if nargin<4
         w=nan;
       end
+      if nargin<5
+        m=nan;
+      end
       obs=nan(size(obj.ndna,1),1);
-      rel=sum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf]),2)/sum(sum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf])));
+      rel=obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf])/sum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf]));
       obs(obj.TYPE_CIRC)=t7*rel(1);
       obs(obj.TYPE_T7Wr)=t7*rel(2);
       obs(obj.TYPE_T7Wf)=t7*rel(3);
-      if isfinite(w)
-        obs(obj.TYPE_W)=max(0,w-t7);
+      if isfinite(m)
+        rel=obj.ndna([obj.TYPE_W,obj.TYPE_NP]);
+        rel=rel/sum(rel);
+        obs(obj.TYPE_W)=(m-t7)*rel(1);
+        obs(obj.TYPE_NP)=(m-t7)*rel(2);
       end
-      err=t7/nansum(nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf])));
+      
+      err=t7/nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf]));
       if isfinite(w)
-        err(2)=w/nansum(nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf,obj.TYPE_W])));
+        %err(2)=w/nansum(nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf,obj.TYPE_W])));
+        % W doesn't reflect true W since stop oligo blocks extension
+        err(2)=0;
+      end
+      if isfinite(m)
+        err(3)=m/nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf,obj.TYPE_W,obj.TYPE_NP]));
       end
       err=err*1e-9*obj.volume*1e-6*6.022e23;
-      obj.printmeasure(sprintf('qPCR(%.1f,%.1f) %s',t7,w,note),obs,err);
+      obj.printmeasure(sprintf('qPCR(%.1f,%.1f,%.1f) %s',t7,w,m,note),obs,err);
     end
     
     function qubitdna(obj,note,ngul)
