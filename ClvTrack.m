@@ -11,6 +11,7 @@ classdef ClvTrack < matlab.mixin.Copyable
     mw;		% Molecular weight of each type
     active;	% Currently active stage (i.e. which is the relevant cdist)
     id;		% ID of current sample
+    doprint;	% True to disable printing
   end
 
   properties (Constant)
@@ -49,9 +50,10 @@ classdef ClvTrack < matlab.mixin.Copyable
   
   
   methods
-    function obj=ClvTrack(initvol, initconc, cleavages, id, note, trackfrac)
+    function obj=ClvTrack(initvol, initconc, cleavages, id, note, trackfrac,rnaLength)
     % initialize pool with given volume (in ul) and concentration (in nM)
     % cleavages are a vector sample of observed cleavages (actually fitness over a single round)
+      obj.doprint=true;
       obj.volume=initvol;
       obj.ndna=zeros(obj.TYPE_NTYPES,1);
       obj.ndna(obj.TYPE_T7Wr)=obj.moles(initvol,initconc);
@@ -76,8 +78,12 @@ classdef ClvTrack < matlab.mixin.Copyable
       end
       obj.printdiv(note,true);
       obj.cumcost=initvol*initconc/1e6*235;   % Template cost
-      obj.rnaLength=108;
-      extLength=71;   % Length added to cDNA beyond RNA end due to RT primer
+      if nargin>=7
+        obj.rnaLength=rnaLength;
+      else
+        obj.rnaLength=108;
+      end
+      extLength=71;   % Length added to cDNA beyond RNA end due to RT primer (BT1453p)
       obj.mw=zeros(1,obj.TYPE_NTYPES);
       obj.mw(obj.TYPE_W)=obj.MWssDNA(obj.rnaLength+extLength);
       obj.mw(obj.TYPE_NP)=obj.MWssDNA(obj.rnaLength+extLength-20);
@@ -125,8 +131,11 @@ classdef ClvTrack < matlab.mixin.Copyable
       obj.printdiv('After updating trackfrac');
     end
   
-    function mix(obj,o2)
+    function mix(obj,o2,useoffset)
     % Add another tracked set to this one
+      if nargin<3
+        useoffset=true;
+      end
       if o2.trackfrac<obj.trackfrac
         o2.changetrackfrac(obj.trackfrac);
       elseif obj.trackfrac<o2.trackfrac
@@ -135,7 +144,11 @@ classdef ClvTrack < matlab.mixin.Copyable
 
       obj.cumcost=obj.cumcost+o2.cumcost;
       
-      offset=ceil(max(cellfun(@(z) max([z.seqs,0]), obj.cdist))/1000)*1000;
+      if useoffset
+        offset=ceil(max(cellfun(@(z) max([z.seqs,0]), obj.cdist))/1000)*1000;
+      else
+        offset=0;	% Use same IDs
+      end
       for i=1:length(obj.cdist)
         %fprintf('%d/%d + %d/%d ->', length(obj.cdist{i}.seqs),length(obj.cdist{i}.cleavage), length(o2.cdist{i}.seqs),length(o2.cdist{i}.cleavage));
         obj.cdist{i}.seqs=[obj.cdist{i}.seqs,o2.cdist{i}.seqs+offset];
@@ -178,6 +191,9 @@ classdef ClvTrack < matlab.mixin.Copyable
       if heading
         fprintf('\n%-7.7s%-50.50s    %5s %6s %6s %6s %6s %6s %6s %6s      Total  Clv  kCopy  pmoled  k>%2.0f%%   p>%2.0f%%  NTrk Cost\n','ID','Desc','Volume','W','NoPre','T7Wf','T7Wr','Circ','URNA','CRNA',100*highcleave,100*highcleave);
         fprintf('%s\n',repmat('-',173,1));
+      end
+      if ~obj.doprint
+        return;
       end
       pmolediv=obj.ndna(obj.active)/obj.avgcopies()*1e12/6.022e23;
       frachigh=obj.cdist{obj.active}.frachigh(highcleave);
@@ -235,7 +251,7 @@ classdef ClvTrack < matlab.mixin.Copyable
     function T7(obj,rnaconc)
     % Transcribe the pool ending with the given RNA concentration
     % After this method, the pool will be referring to the RNA produced only, not including the template
-      obj.cumcost=obj.cumcost+0.079*obj.volume;   % Price/ul of rx:  T7: .050 NTP .016, SuperaseIn .013
+      obj.cumcost=obj.cumcost+0.081*obj.volume;   % Price/ul of rx:  T7: .50/ul@10x NTP .16/ul@11x, SuperaseIn .33/ul@20x
       gain=rnaconc/obj.conc(obj.TYPE_T7Wr);
       rna=obj.cdist{obj.TYPE_T7Wr}.copy();
       rna.resample(round(length(rna.seqs)*gain),true);
@@ -249,7 +265,7 @@ classdef ClvTrack < matlab.mixin.Copyable
     function RT(obj, efficiency)
     % Reverse transcription
       stopconc=2000;
-      obj.cumcost=obj.cumcost+.236*obj.volume;
+      obj.cumcost=obj.cumcost+(.236+0.015)*obj.volume;   % 4.72/ul@20x(Omni) + $0.15/ul@10x for stop oligos
       rnaconc=obj.conc(obj.TYPE_URNA)+obj.conc(obj.TYPE_CRNA);
       if rnaconc*efficiency>stopconc
         %efficiency=stopconc/rnaconc;
@@ -301,6 +317,9 @@ classdef ClvTrack < matlab.mixin.Copyable
     end
     
     function printmeasure(obj,note,obs,err)
+      if ~obj.doprint
+        return;
+      end
       allconc=nan(size(obs));
       for i=1:length(obs)
         if isfinite(obs(i))
@@ -331,7 +350,7 @@ classdef ClvTrack < matlab.mixin.Copyable
       fprintf('\n');
     end
     
-    function qpcr(obj,note,t7,w,m)
+    function qpcr(obj,note,t7,w,m,t7nu)
     % Note qPCR measurement (in nM)
       if nargin<4
         w=nan;
@@ -339,11 +358,22 @@ classdef ClvTrack < matlab.mixin.Copyable
       if nargin<5
         m=nan;
       end
+      if nargin<6
+        t7nu=nan;
+      end
+      % W doesn't reflect true W since stop oligo blocks extension
+      w=nan;
       obs=nan(size(obj.ndna,1),1);
       rel=obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf])/sum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf]));
-      obs(obj.TYPE_CIRC)=t7*rel(1);
-      obs(obj.TYPE_T7Wr)=t7*rel(2);
-      obs(obj.TYPE_T7Wf)=t7*rel(3);
+      if isfinite(t7nu)
+        obs(obj.TYPE_CIRC)=max([0,t7-t7nu]);
+        obs(obj.TYPE_T7Wr)=t7*rel(2);
+        obs(obj.TYPE_T7Wf)=t7*rel(3);
+      else
+        obs(obj.TYPE_CIRC)=t7*rel(1);
+        obs(obj.TYPE_T7Wr)=t7*rel(2);
+        obs(obj.TYPE_T7Wf)=t7*rel(3);
+      end
       if isfinite(m)
         rel=obj.ndna([obj.TYPE_W,obj.TYPE_NP]);
         rel=rel/sum(rel);
@@ -352,16 +382,14 @@ classdef ClvTrack < matlab.mixin.Copyable
       end
       
       err=t7/nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf]));
-      if isfinite(w)
-        %err(2)=w/nansum(nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf,obj.TYPE_W])));
-        % W doesn't reflect true W since stop oligo blocks extension
-        err(2)=0;
-      end
       if isfinite(m)
-        err(3)=m/nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf,obj.TYPE_W,obj.TYPE_NP]));
+        err(end+1)=m/nansum(obj.ndna([obj.TYPE_CIRC,obj.TYPE_T7Wr,obj.TYPE_T7Wf,obj.TYPE_W,obj.TYPE_NP]));
+      end
+      if isfinite(t7nu)
+        err(end+1)=t7nu/nansum(nansum(obj.ndna([obj.TYPE_T7Wr,obj.TYPE_T7Wf,obj.TYPE_W])));
       end
       err=err*1e-9*obj.volume*1e-6*6.022e23;
-      obj.printmeasure(sprintf('qPCR(%.1f,%.1f,%.1f) %s',t7,w,m,note),obs,err);
+      obj.printmeasure(sprintf('qPCR(%.1f,%.1f,%.1f,%.1f) %s',t7,w,m,t7nu,note),obs,err);
     end
     
     function qubitdna(obj,note,ngul)
@@ -414,9 +442,22 @@ classdef ClvTrack < matlab.mixin.Copyable
       obj.printmeasure(sprintf('Nanodrop(%.1f ng/ul%s) %s',ngul,ratios,note),obs,scale);
     end
       
+    function USER(obj) 
+    % USER digestion 
+    % Convert all cirucluar to T7Wr
+      obj.cumcost=obj.cumcost+0.014*obj.volume;	 % $1.40/ul@100x
+      obj.cdist{obj.TYPE_T7Wr}.addsample(obj.cdist{obj.TYPE_CIRC},obj.cdist{obj.TYPE_CIRC}.nseq(),false);
+      obj.cdist{obj.TYPE_CIRC}.clear();
+      obj.ndna(obj.TYPE_T7Wr)=obj.cdist{obj.TYPE_T7Wr}.nseq()/obj.trackfrac;
+      obj.ndna(obj.TYPE_CIRC)=0;
+      obj.active=obj.TYPE_T7Wr;
+      obj.printdiv('USER');
+    end
+    
     function gain=PCR(obj,ncycles,maxconc)
     % PCR amplify the pool to the given final volume and concentration
-    % Assumes perfect amplication and uniform copying of all input molecules
+    % Assumes perfect amplication and uniform copying of all T7-prefixed, X-suffix input molecules
+      obj.cumcost=obj.cumcost+0.0095*obj.volume;	 % $1.63/ul for taq@200x, $.07/ul for dNTPs@50x
       if nargin<3
         maxconc=175;
       end
@@ -450,7 +491,6 @@ classdef ClvTrack < matlab.mixin.Copyable
         end
       end
       gain=obj.total()/oldtotal;
-      obj.cumcost=obj.cumcost+obj.volume*263/250/50;  % Kapa is $263/250U, uses 1U/50ul
       obj.active=obj.TYPE_T7Wr;
       obj.printdiv(sprintf('PCR (gain=%.3f)',gain));
     end
